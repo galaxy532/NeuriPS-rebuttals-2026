@@ -15,6 +15,9 @@ Run from the repository root. This is the only GPU step.
     # fewer epochs for a quick end-to-end smoke test
     python extract_features.py --epochs 2 --splits train
 
+    # re-extract from the saved weights, WITHOUT repeating the 1-2 h training
+    python extract_features.py --from-checkpoint
+
 All defaults are relative to the repository root, so no paths need to be typed:
 the dataset is read from `../data/waterbird_complete95_forest2water2` and the
 cached bundles are written to `features_waterbirds_<split>.npz` in the repo
@@ -26,6 +29,12 @@ The network is trained once and then every requested split is extracted in the
 same run. This matters because it is the only thing that makes the raw dataset
 genuinely disposable: if splits were extracted one per invocation, you would
 have to keep the 1.2 GB around to get the next one.
+
+The trained weights are also written to `erm_resnet50.pt`, so a later
+re-extraction (a split you did not ask for, or a change to what gets cached)
+costs minutes via `--from-checkpoint` instead of another full training run.
+Note that `--cleanup` deletes the raw images, which re-extraction still needs;
+keep the dataset until you are sure the cached bundles are what you want.
 
 Group definition and why Waterbirds maps onto the manuscript's setup
 -------------------------------------------------------------------
@@ -70,6 +79,11 @@ def build_waterbirds(root: str, split: str):
 
     Expects the standard release layout: `metadata.csv` at `root` with columns
     img_id, img_filename, y, split, place. split codes are 0=train, 1=val, 2=test.
+
+    Returns paths, y (+/-1 bird label), g (0 = majority), and place (+/-1
+    background label). `place` is ground-truth metadata, not inferred from
+    pixels: Waterbirds is synthetic, so the background used for each image was
+    recorded at construction time. It is what `two_concept_identify` needs.
     """
     import pandas as pd
 
@@ -80,8 +94,9 @@ def build_waterbirds(root: str, split: str):
     y_raw = md["y"].to_numpy().astype(int)          # 1 = waterbird
     place = md["place"].to_numpy().astype(int)      # 1 = water background
     y = np.where(y_raw == 1, 1, -1)                 # to the +/-1 convention
+    p_pm = np.where(place == 1, 1, -1)              # water = +1, land = -1
     g = (y_raw != place).astype(int)                # 0 = agrees (maj), 1 = disagrees (min)
-    return paths, y, g
+    return paths, y, g, p_pm
 
 
 def main() -> None:
@@ -108,6 +123,11 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--cleanup", action="store_true",
                     help="delete the raw dataset after all splits are cached")
+    ap.add_argument("--checkpoint", default="erm_resnet50.pt",
+                    help="where the trained weights are saved (default: erm_resnet50.pt)")
+    ap.add_argument("--from-checkpoint", action="store_true",
+                    help="load --checkpoint and SKIP training. Use this to "
+                         "re-extract features without repeating the 1-2 h run.")
     args = ap.parse_args()
 
     if not os.path.exists(os.path.join(args.root, "metadata.csv")):
@@ -147,7 +167,7 @@ def main() -> None:
             img = Image.open(self.paths[i]).convert("RGB")
             return self.tf(img), int(self.y[i] > 0), int(self.g[i])
 
-    p_tr, y_tr, g_tr = build_waterbirds(args.root, "train")
+    p_tr, y_tr, g_tr, _ = build_waterbirds(args.root, "train")
     print(f"train n={len(p_tr)}  minority fraction eps={g_tr.mean():.4f}")
 
     # -- ERM training of the full network -----------------------------------
@@ -156,33 +176,50 @@ def main() -> None:
     net.fc = nn.Linear(d_feat, 2)
     net = net.to(dev)
 
-    dl = DataLoader(DS(p_tr, y_tr, g_tr, tf_train), batch_size=args.bs,
-                    shuffle=True, num_workers=args.workers, pin_memory=True)
-    opt = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=0.9,
-                          weight_decay=args.wd)
-    lossf = nn.CrossEntropyLoss()
-    net.train()
-    for ep in range(args.epochs):
-        tot = corr = 0
-        run = 0.0
-        for xb, yb, _ in dl:
-            xb, yb = xb.to(dev, non_blocking=True), yb.to(dev, non_blocking=True)
-            out = net(xb)
-            loss = lossf(out, yb)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            run += loss.item() * yb.size(0)
-            corr += (out.argmax(1) == yb).sum().item()
-            tot += yb.size(0)
-        print(f"  epoch {ep + 1}/{args.epochs}  loss={run / tot:.4f}  acc={corr / tot:.4f}")
+    if args.from_checkpoint:
+        # Re-extraction path: reuse the trained weights instead of spending
+        # another 1-2 h. The architecture must be rebuilt identically before
+        # the state dict will load.
+        if not os.path.exists(args.checkpoint):
+            raise SystemExit(
+                f"--from-checkpoint given but {args.checkpoint} does not exist. "
+                "Run once without it to train and save the weights."
+            )
+        net.load_state_dict(torch.load(args.checkpoint, map_location=dev))
+        print(f"loaded {args.checkpoint}; skipping training")
+    else:
+        dl = DataLoader(DS(p_tr, y_tr, g_tr, tf_train), batch_size=args.bs,
+                        shuffle=True, num_workers=args.workers, pin_memory=True)
+        opt = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=0.9,
+                              weight_decay=args.wd)
+        lossf = nn.CrossEntropyLoss()
+        net.train()
+        for ep in range(args.epochs):
+            tot = corr = 0
+            run = 0.0
+            for xb, yb, _ in dl:
+                xb, yb = xb.to(dev, non_blocking=True), yb.to(dev, non_blocking=True)
+                out = net(xb)
+                loss = lossf(out, yb)
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                run += loss.item() * yb.size(0)
+                corr += (out.argmax(1) == yb).sum().item()
+                tot += yb.size(0)
+            print(f"  epoch {ep + 1}/{args.epochs}  loss={run / tot:.4f}  acc={corr / tot:.4f}")
+
+        # Save before the head is swapped out, so the checkpoint reloads cleanly.
+        torch.save(net.state_dict(), args.checkpoint)
+        print(f"saved trained weights -> {args.checkpoint}  "
+              f"(re-extract later with --from-checkpoint, no retraining)")
 
     # -- Freeze Phi and cache every requested split in this one pass ---------
     net.fc = nn.Identity()
     net.eval()
     written = []
     for split in [s.strip() for s in args.splits.split(",") if s.strip()]:
-        paths, y, g = build_waterbirds(args.root, split)
+        paths, y, g, place = build_waterbirds(args.root, split)
         dl_e = DataLoader(DS(paths, y, g, tf_eval), batch_size=args.bs,
                           shuffle=False, num_workers=args.workers, pin_memory=True)
         feats = []
@@ -195,6 +232,7 @@ def main() -> None:
         out = f"{args.out_prefix}_{split}.npz"
         np.savez_compressed(
             out, phi=phi, y=y.astype(int), g=g.astype(int),
+            place=place.astype(int),
             idx_r=np.arange(0), idx_s=np.arange(0),
             meta=np.array(repr({"source": "waterbirds", "split": split,
                                 "eps": float(g.mean()), "d": int(phi.shape[1]),

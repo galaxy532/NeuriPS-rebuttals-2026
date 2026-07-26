@@ -24,3 +24,7 @@ venv/
 
 # OS
 .DS_Store
+
+# Trained ERM weights (regenerable, ~100 MB)
+*.pt
+*.pth

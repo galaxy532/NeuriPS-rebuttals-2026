@@ -80,6 +80,7 @@ class FeatureBundle:
     g: np.ndarray
     idx_r: np.ndarray
     idx_s: np.ndarray
+    place: np.ndarray | None = None
     meta: dict = field(default_factory=dict)
 
     @property
@@ -91,10 +92,11 @@ class FeatureBundle:
         return self.phi[:, self.idx_s]
 
     def save(self, path: str) -> None:
+        extra = {} if self.place is None else {"place": self.place}
         np.savez_compressed(
             path, phi=self.phi, y=self.y, g=self.g,
             idx_r=self.idx_r, idx_s=self.idx_s,
-            meta=np.array(repr(self.meta), dtype=object),
+            meta=np.array(repr(self.meta), dtype=object), **extra,
         )
 
     @staticmethod
@@ -112,6 +114,7 @@ class FeatureBundle:
             g=z["g"].astype(int),
             idx_r=z["idx_r"].astype(int),
             idx_s=z["idx_s"].astype(int),
+            place=z["place"].astype(int) if "place" in z else None,
             meta=meta,
         )
 
@@ -481,6 +484,8 @@ def within_cell_coupling(
     ridge_alpha: float = 1.0,
     n_splits: int = 5,
     seed: int = 0,
+    min_cell: int = 200,
+    reliable_cell: int = 400,
 ) -> dict:
     """Test for residual Phi_r -> Phi_s coupling *within* each (y, g) cell.
 
@@ -500,6 +505,20 @@ def within_cell_coupling(
     while preserving the internal covariance structure of the s-features, so
     the null accounts for dimensionality and for correlations among s-features.
 
+    Cell size is the binding constraint, and it is why this test should be run
+    on the TEST split. On the Waterbirds *train* split the four cells are
+    3498 / 184 / 56 / 1057: fitting a multi-output ridge from ~20 r-features
+    inside a 56-sample cell yields an estimate whose error bar swamps its value.
+    Cross-validation prevents that number from being spuriously HIGH, but it
+    cannot create information -- the result simply becomes unstable across
+    seeds while still printing to three decimals next to a p-value. The test
+    split is constructed roughly balanced (~2255/2255/642/642), so the smallest
+    cell is ~642 rather than 56.
+
+    Cells below `min_cell` are therefore refused outright rather than reported,
+    and cells between `min_cell` and `reliable_cell` are reported with an
+    explicit warning attached.
+
     Returns per-cell held-out R^2, the null mean, an empirical p-value, and the
     pooled (marginal) R^2 for contrast.
     """
@@ -509,11 +528,12 @@ def within_cell_coupling(
         for gg in (0, 1):
             m = (y == yy) & (g == gg)
             n = int(m.sum())
-            if n < 20:
+            if n < min_cell:
                 cells.append({
                     "y": yy, "g": gg, "n": n, "r2": float("nan"),
                     "null_mean": float("nan"), "p": float("nan"),
-                    "note": "cell too small (n < 20)",
+                    "note": f"REFUSED: n={n} < min_cell={min_cell}; too small "
+                            "for a meaningful fit (use the test split)",
                 })
                 continue
             X, Y = phi_r[m], phi_s[m]
@@ -527,16 +547,24 @@ def within_cell_coupling(
                 "y": yy, "g": gg, "n": n, "r2": r2,
                 "null_mean": float(null.mean()) if null.size else float("nan"),
                 "null_q95": float(np.quantile(null, 0.95)) if null.size else float("nan"),
-                "p": p, "note": "",
+                "p": p,
+                "note": "" if n >= reliable_cell else
+                        f"WARNING: n={n} < {reliable_cell}; estimate is unstable",
             })
 
     pooled = _cv_r2(phi_r, phi_s, ridge_alpha, n_splits, seed)
     finite = [c["r2"] for c in cells if np.isfinite(c["r2"])]
+    sizes = [c["n"] for c in cells]
     return {
         "cells": cells,
         "pooled_r2": pooled,
         "mean_within_cell_r2": float(np.mean(finite)) if finite else float("nan"),
         "n_perm": n_perm,
+        "min_cell_size": int(min(sizes)) if sizes else 0,
+        "n_cells_refused": sum(1 for c in cells if not np.isfinite(c["r2"])),
+        "n_cells_unreliable": sum(1 for c in cells
+                                  if np.isfinite(c["r2"]) and c["n"] < reliable_cell),
+        "p_value_floor": 1.0 / (1.0 + n_perm),
     }
 
 

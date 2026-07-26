@@ -22,9 +22,35 @@ identifies the coordinates the HEAD RELIES ON, whereas the manuscript's
 r/s split is defined by whether the coordinate's relationship to the label is
 GROUP-DEPENDENT. A coordinate can be heavily relied upon and perfectly causal.
 
-We therefore reuse the identification rule already validated in the
-manuscript's controlled Colored-MNIST experiment: the group-conditional
-correlation sign-flip rule.
+Two rules are provided, and the choice between them matters.
+
+PREFERRED -- `two_concept_identify`. Waterbirds annotates the spurious
+attribute directly: `metadata.csv` carries `place` (land/water) next to `y`
+(landbird/waterbird). Each feature is decomposed over the four (y, place) cells
+as a 2x2 factorial and classified by which factor it responds to. This uses the
+annotation instead of inferring around it. See that function for the details.
+
+CROSS-CHECK -- `sign_flip_identify`, the rule validated in the manuscript's
+Colored-MNIST experiment, described below. It requires only the group index, so
+it applies where no attribute annotation exists, and running both gives an
+independent corroboration of the split (`agreement`).
+
+Why the sign-flip rule still works on a binary concept
+------------------------------------------------------
+A natural objection is that Colored-MNIST had a quantitative concept (digit
+class) with an explicitly inverted intensity map, whereas Waterbirds has a
+binary label and nothing is "inverted" during image generation. Two answers:
+
+  * With binary y, corr(c_k, y | g) is the point-biserial correlation, i.e. the
+    standardised difference of class means within group g. Correlation needs
+    variation, not ordinality, so the statistic is well defined.
+  * The inversion IS present, but it comes from the group DEFINITION rather
+    than from image generation. Waterbirds groups are g := 1[place != y], so
+    conditioning on g fixes the background-label relation: place = y within
+    g = 0 and place = -y within g = 1. A pure background feature therefore
+    correlates positively with y in one group and negatively in the other. In
+    Colored-MNIST the flip was engineered through the intensity map; here it is
+    inherited from the standard majority/minority partition.
 
 The rule
 --------
@@ -62,6 +88,143 @@ Two routes are provided:
 from __future__ import annotations
 
 import numpy as np
+
+
+def two_concept_identify(
+    phi: np.ndarray,
+    y: np.ndarray,
+    place: np.ndarray,
+    tau: float = 0.15,
+    purity: float = 0.60,
+) -> dict:
+    """Split Phi using BOTH annotations directly -- the preferred rule.
+
+    Waterbirds records the spurious attribute explicitly: `metadata.csv` carries
+    `place` (0 = land, 1 = water) alongside `y` (0 = landbird, 1 = waterbird).
+    The sign-flip rule below infers spuriousness indirectly, through the group
+    definition; when the attribute is annotated there is no reason to do that.
+
+    With both recoded to +/-1, each feature is decomposed over the four
+    (y, place) cells as a 2x2 factorial:
+
+        c_k = beta_0 + beta_y * y + beta_p * place + beta_int * (y * place).
+
+    Four parameters for four cell means, so this is saturated -- an exact
+    reparametrisation of the cell means, not an approximation. The coefficients
+    are the standard contrasts, computed from UNWEIGHTED cell means m[a][b]:
+
+        beta_0   = ( m[+][+] + m[+][-] + m[-][+] + m[-][-] ) / 4
+        beta_y   = ( m[+][+] + m[+][-] - m[-][+] - m[-][-] ) / 4
+        beta_p   = ( m[+][+] - m[+][-] + m[-][+] - m[-][-] ) / 4
+        beta_int = ( m[+][+] - m[+][-] - m[-][+] + m[-][-] ) / 4
+
+    Unweighted means matter: ordinary least squares would weight each cell by
+    its size, and the waterbird-on-land cell (n = 56 in train) would be
+    effectively ignored -- yet it is precisely the cell where y and place
+    disagree, which is what makes the two effects separable at all.
+
+    Classification, after scaling each feature by its pooled within-cell
+    standard deviation so the coefficients are comparable across features:
+
+        strength = sqrt(beta_y^2 + beta_p^2)          -- does the feature respond at all
+        purity_r = |beta_y| / (|beta_y| + |beta_p|)   -- to which factor
+
+        r-type if strength >= tau and purity_r >= purity
+        s-type if strength >= tau and purity_r <= 1 - purity
+        weak   otherwise
+
+    `beta_int` is reported but not used for classification: a large |beta_int|
+    marks a conjunction feature (responding to bird-on-mismatched-background),
+    which is neither cleanly causal nor cleanly spurious and which the sign-flip
+    rule would silently misfile.
+
+    A caution the caller should propagate: y and place are strongly correlated
+    on the train split (corr = 0.867), so beta_y and beta_p are identifiable but
+    noisy -- variance inflation factor ~4 relative to a balanced design. The
+    returned `se_approx` gives the approximate standard error shared by the
+    contrasts, which is dominated by the smallest cell.
+    """
+    ys = np.where(np.asarray(y) > 0, 1.0, -1.0)
+    ps = np.where(np.asarray(place) > 0, 1.0, -1.0)
+
+    cells, sizes, var_acc = {}, {}, []
+    for a in (1.0, -1.0):
+        for b in (1.0, -1.0):
+            m = (ys == a) & (ps == b)
+            n = int(m.sum())
+            sizes[(a, b)] = n
+            if n == 0:
+                raise ValueError(
+                    f"cell (y={a:+.0f}, place={b:+.0f}) is empty; the two "
+                    "effects are not separable without all four cells."
+                )
+            cells[(a, b)] = phi[m].mean(axis=0)
+            if n > 1:
+                var_acc.append(phi[m].var(axis=0, ddof=1) * (n - 1))
+    dof = sum(sizes.values()) - 4
+    pooled_sd = np.sqrt(np.sum(var_acc, axis=0) / max(dof, 1))
+    pooled_sd[pooled_sd < 1e-12] = 1.0
+
+    pp, pm = cells[(1.0, 1.0)], cells[(1.0, -1.0)]
+    mp, mm = cells[(-1.0, 1.0)], cells[(-1.0, -1.0)]
+    beta_y = (pp + pm - mp - mm) / 4.0 / pooled_sd
+    beta_p = (pp - pm + mp - mm) / 4.0 / pooled_sd
+    beta_int = (pp - pm - mp + mm) / 4.0 / pooled_sd
+
+    # SE of an unweighted contrast: (1/4) * sqrt(sum_cells 1/n_cell), in units
+    # of the pooled within-cell SD. Dominated by the smallest cell.
+    se = 0.25 * float(np.sqrt(sum(1.0 / n for n in sizes.values())))
+
+    strength = np.sqrt(beta_y ** 2 + beta_p ** 2)
+    denom = np.abs(beta_y) + np.abs(beta_p)
+    purity_r = np.divide(np.abs(beta_y), denom, out=np.zeros_like(denom),
+                         where=denom > 1e-12)
+    strong = strength >= tau
+    idx_r = np.flatnonzero(strong & (purity_r >= purity))
+    idx_s = np.flatnonzero(strong & (purity_r <= 1.0 - purity))
+
+    return {
+        "idx_r": idx_r,
+        "idx_s": idx_s,
+        "beta_y": beta_y,
+        "beta_p": beta_p,
+        "beta_int": beta_int,
+        "strength": strength,
+        "purity_r": purity_r,
+        "se_approx": se,
+        "cell_sizes": {f"y={int(a):+d},place={int(b):+d}": n for (a, b), n in sizes.items()},
+        "min_cell": int(min(sizes.values())),
+        "n_r": int(idx_r.size),
+        "n_s": int(idx_s.size),
+        "n_weak": int(phi.shape[1] - idx_r.size - idx_s.size),
+        "n_conjunction": int((np.abs(beta_int) > np.maximum(np.abs(beta_y), np.abs(beta_p))).sum()),
+        "tau": tau,
+        "purity": purity,
+    }
+
+
+def agreement(res_two: dict, res_flip: dict, d: int) -> dict:
+    """Cross-check: how far do the two identification rules agree?
+
+    The sign-flip rule and the two-concept regression are independent routes to
+    the same split, so their agreement is evidence that neither is an artefact.
+    Reported as the overlap of the two r-sets and the two s-sets.
+    """
+    r2, s2 = set(res_two["idx_r"].tolist()), set(res_two["idx_s"].tolist())
+    rf, sf = set(res_flip["idx_r"].tolist()), set(res_flip["idx_s"].tolist())
+
+    def jac(a: set, b: set) -> float:
+        return len(a & b) / len(a | b) if (a | b) else float("nan")
+
+    labelled = (r2 | s2) & (rf | sf)
+    concord = sum(1 for k in labelled
+                  if (k in r2) == (k in rf) and (k in s2) == (k in sf))
+    return {
+        "jaccard_r": jac(r2, rf),
+        "jaccard_s": jac(s2, sf),
+        "n_labelled_by_both": len(labelled),
+        "concordance_on_shared": concord / len(labelled) if labelled else float("nan"),
+    }
 
 
 def _group_corr(phi: np.ndarray, concept: np.ndarray, mask: np.ndarray) -> np.ndarray:
