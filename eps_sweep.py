@@ -1,6 +1,20 @@
 """
 eps_sweep.py -- The last-layer group-proportion sweep on frozen features.
 
+Run from the repository root, after analyze.py (which gives you alpha-hat).
+CPU only, but the horizon is long: budget an hour or so at T = 2e6.
+
+    # the run that matters -- pass the alpha-hat printed by analyze.py
+    python eps_sweep.py --alpha 0.83
+
+    # quick smoke test first, to check it moves at all
+    python eps_sweep.py --alpha 0.83 --T 50000
+
+    # a wider sweep if the collapse looks marginal
+    python eps_sweep.py --alpha 0.83 --eps 0.01,0.02,0.05,0.1,0.2,0.5
+
+Writes `eps_sweep.json` and `eps_sweep.md`; the `.md` is the paste-ready table.
+
 This is the direct test of the manuscript's central prediction, in the setting
 the manuscript itself points to as its main application: last-layer retraining
 on a frozen representation.
@@ -113,7 +127,8 @@ def to_markdown(res: dict) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--bundle", required=True)
+    ap.add_argument("--bundle", default="features_waterbirds_train.npz",
+                    help="default: features_waterbirds_train.npz")
     ap.add_argument("--eps", default="0.01,0.02,0.05,0.1,0.25",
                     help="comma-separated target minority fractions")
     ap.add_argument("--h", type=float, default=0.05, help="constant step size")

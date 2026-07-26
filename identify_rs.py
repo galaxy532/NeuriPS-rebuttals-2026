@@ -1,6 +1,19 @@
 """
 identify_rs.py -- Splitting a frozen representation into Phi_r and Phi_s.
 
+This is a library, called by analyze.py; it has no CLI of its own. To inspect
+the split on its own from the repository root:
+
+    python -c "
+    from common import FeatureBundle, standardize
+    from identify_rs import sign_flip_identify, tau_sensitivity
+    b = FeatureBundle.load('features_waterbirds_train.npz')
+    phi = standardize(b.phi)
+    r = sign_flip_identify(phi, b.y, b.g, tau=0.2)
+    print('n_r', r['n_r'], 'n_s', r['n_s'], 'weak', r['n_weak'])
+    for row in tau_sensitivity(phi, b.y, b.g): print(row)
+    "
+
 This deliberately does NOT use Grad-CAM. Grad-CAM produces a spatial saliency
 map over convolutional feature maps; applied to a flat penultimate vector
 feeding a linear head it degenerates to gradient-times-activation, and more

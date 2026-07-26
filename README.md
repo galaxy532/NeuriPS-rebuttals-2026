@@ -3,6 +3,19 @@
 Standalone experiment code for the author-response period. Nothing here touches
 the manuscript sources; this folder is self-contained.
 
+Assumed layout — commands are run from the repository root, and the dataset
+lives beside the repo, never inside it:
+
+```
+<paperspace root>/
+├── NeuriPS-rebuttals-2026/     <- you are here; run all commands from here
+│   ├── download_waterbirds.py
+│   ├── extract_features.py
+│   └── ...
+└── data/
+    └── waterbird_complete95_forest2water2/
+```
+
 **Goal.** Test, on a standard benchmark, the claim that what matters is the
 coupling between `Phi_r` and `Phi_s` in the *learned representation*, not
 between `r` and `s` in the raw data — and therefore that the theory's rates
@@ -20,6 +33,7 @@ numbers and is not part of this pipeline.
 | File | Role | Runs where |
 |---|---|---|
 | `common.py` | Core estimators: margin direction `v`, group margins, operators `A`/`B`, isotropy diagnostics, `alpha`, within-cell coupling test, logistic GD | CPU |
+| `download_waterbirds.py` | Fetch + extract + verify the dataset (no credentials needed) | CPU |
 | `extract_features.py` | ERM training + frozen `Phi` extraction (Waterbirds) | **GPU** |
 | `identify_rs.py` | `Phi_r` / `Phi_s` split by the group-conditional sign-flip rule (+ optional SAE) | CPU / GPU |
 | `analyze.py` | Driver: identification → coupling test → isotropy defect → `alpha` | CPU |
@@ -27,24 +41,54 @@ numbers and is not part of this pipeline.
 
 ## How to run
 
+Run every command **from the repository root**. All defaults are relative, so
+there are no paths to type:
+
 ```bash
-# 1. on the GPU box: ERM + freeze Phi   (the only GPU step, ~1-2 h)
-python extract_features.py --root /path/to/waterbird_complete95_forest2water2 \
-                           --out features_waterbirds.npz --epochs 10
+# 0. fetch the dataset (~1.2 GB, public, no token) into ../data
+python download_waterbirds.py
+
+# 1. ERM + freeze Phi, caching train and test in one pass  (only GPU step, ~1-2 h)
+python extract_features.py --cleanup
 
 # 2. identification + coupling test + isotropy defect + alpha
-python analyze.py --bundle features_waterbirds.npz --tau 0.2 --n-perm 200
+python analyze.py
 
-# 3. the group-proportion sweep, using alpha-hat from step 2
-python eps_sweep.py --bundle features_waterbirds.npz --alpha <alpha_hat> \
-                    --T 2000000 --h 0.05
+# 3. the group-proportion sweep, using the alpha-hat printed by step 2
+python eps_sweep.py --alpha <alpha_hat>
 ```
 
-Steps 2 and 3 are CPU-only and cheap: they operate on cached features. Each
-writes both a `.json` and a `.md`; the `.md` is the paste-ready table.
+That is the whole run. Steps 0 and 1 can be collapsed with
+`python extract_features.py --download --cleanup`.
+
+Where things live:
+
+| | path |
+|---|---|
+| dataset | `../data/waterbird_complete95_forest2water2` (sibling of the repo) |
+| cached features | `features_waterbirds_{train,test}.npz` in the repo (git-ignored) |
+| results | `results.{json,md}`, `eps_sweep.{json,md}` (git-ignored) |
+
+Steps 2 and 3 are CPU-only and operate purely on cached features. Each writes a
+`.json` and a `.md`; the `.md` is the paste-ready table.
 
 `analyze.py` also carries two flags used only by the validation harness —
 `--use-stored-split` and `--no-standardize`. Leave both off for real data.
+
+### Do you need to keep the 1.2 GB?
+
+No — **once the features are cached, the raw dataset is disposable.** Steps 2
+and 3 never open an image. `extract_features.py` trains once and extracts all
+requested splits in the same pass precisely so that one visit to the raw data is
+enough, and `--cleanup` deletes it afterwards.
+
+The trade is roughly 1.2 GB of images for ~40–50 MB of cached features per
+split. The only reason to keep the raw data is if you expect to **re-extract**:
+a different backbone, more epochs, another seed, or a split you did not ask for
+the first time. If there is any chance of that, run without `--cleanup` — a
+re-download costs ~10 minutes, which is worse than it sounds on the day of a
+deadline. Safe middle ground: keep it until `analyze.py` has produced a coupling
+result you are happy with, then delete.
 
 ## What each reviewer ask maps onto
 

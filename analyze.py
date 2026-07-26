@@ -1,6 +1,22 @@
 """
 analyze.py -- Main driver: from a frozen-feature bundle to rebuttal-ready numbers.
 
+Run from the repository root, after extract_features.py. CPU only, cheap.
+
+    # the usual run: coupling test + isotropy defect + alpha on the train split
+    python analyze.py
+
+    # more permutations for tighter p-values (the floor is 1/(1+n_perm))
+    python analyze.py --n-perm 1000
+
+    # check whether the coupling also holds on the test split
+    python analyze.py --bundle features_waterbirds_test.npz --out-prefix results_test
+
+    # if the raw coordinates are too polysemantic, use the SAE route (needs torch)
+    python analyze.py --sae --tau 0.15
+
+Writes `results.json` and `results.md`; the `.md` is the paste-ready table.
+
 Pipeline
 --------
   1. Load the .npz bundle written by extract_features.py and standardise Phi.
@@ -180,7 +196,9 @@ def to_markdown(res: dict) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--bundle", required=True, help=".npz from extract_features.py")
+    ap.add_argument("--bundle", default="features_waterbirds_train.npz",
+                    help=".npz from extract_features.py "
+                         "(default: features_waterbirds_train.npz)")
     ap.add_argument("--tau", type=float, default=0.2)
     ap.add_argument("--n-perm", type=int, default=200)
     ap.add_argument("--quantile", type=float, default=0.01,

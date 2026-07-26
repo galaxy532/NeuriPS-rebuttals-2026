@@ -1,6 +1,18 @@
 """
 common.py -- Core estimators for the rebuttal experiments.
 
+This is a library, not a command-line script: it is imported by analyze.py,
+eps_sweep.py and the validation harness in ../Estimator_Validation/. To use it
+directly from the repository root:
+
+    python -c "
+    from common import FeatureBundle, fit_margin_direction, standardize
+    b = FeatureBundle.load('features_waterbirds_train.npz')
+    b.phi = standardize(b.phi)
+    mf = fit_margin_direction(b.phi, b.y, b.g)
+    print(mf.gam_tilde, mf.separable_frac)
+    "
+
 Every quantity below is named after the object it estimates in the manuscript,
 and each function docstring states the equation it implements. Nothing is
 introduced as an unexplained alias.
