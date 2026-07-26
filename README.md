@@ -31,6 +31,19 @@ python eps_sweep.py --alpha <A>        # 4. the rate result    (~1 h)
 
 `<A>` is the alpha printed by step 3. That's it.
 
+Step 3 has exactly one option. It runs **both** identification rules
+(two-concept and sign-flip) and reports their agreement; the switch only
+chooses which columns they run on:
+
+```bash
+python analyze.py          # raw Phi coordinates -> results_test_raw.{json,md}
+python analyze.py --sae    # SAE activations     -> results_test_sae.{json,md}
+```
+
+Use the first. Only reach for `--sae` if the first reports most features as
+"weak" — the symptom of polysemantic raw coordinates. The two write to
+different files, so neither clobbers the other.
+
 Before step 2 finishes you can sanity-check the estimators — no data or GPU
 needed:
 
@@ -42,8 +55,14 @@ cd Estimator_Validation && python validate.py && cd ..
 
 | Step | Produces | The number that matters |
 |---|---|---|
-| 3 `analyze.py` | `results.md` | **within-cell R²** and its p-value |
+| 3 `analyze.py` | `results_test_raw.md` | **within-cell R²** and its p-value, per rule |
 | 4 `eps_sweep.py` | `eps_sweep.md` | **minority invariant CV** (0 = perfect collapse) |
+
+`results_test_raw.md` has one section per rule, each with its own coupling
+table, isotropy defects and `alpha`. The two rules use different information —
+two-concept reads the `place` annotation, sign-flip only the group index — so
+if they agree, that is much harder to dismiss than either alone. Their overlap
+is reported at the top of the file.
 
 **Step 3 is the one that carries the rebuttal.** Read the within-cell R² table:
 
@@ -66,7 +85,8 @@ still stands on its own. Do not let the two stand or fall together.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `needs the place annotation` | bundle predates the two-concept rule | rerun step 2 (`--from-checkpoint` if you already trained) |
+| warning: no `place` annotation | bundle predates the two-concept rule | rerun step 2 (`--from-checkpoint` if you already trained) |
+| most features "weak" | polysemantic raw coordinates | `python analyze.py --sae` |
 | `n_r` or `n_s` < 2 | threshold too strict | `--tau 0.10` |
 | cells "REFUSED" | you used the train bundle | drop `--bundle`; the default is test |
 | `beta_min` far below `max(alpha,1)` | run too short | expected — see the note below |
@@ -125,8 +145,8 @@ reviewers are not empty-handed today.
 |---|---|---|
 | `download_waterbirds.py` | fetch + extract + verify | CPU |
 | `extract_features.py` | ERM + freeze `Phi`, all splits in one pass | **GPU** |
-| `identify_rs.py` | `Phi_r`/`Phi_s` split: two-concept rule + sign-flip cross-check | CPU |
-| `analyze.py` | coupling test → isotropy defect → `alpha` | CPU |
+| `identify_rs.py` | the two `Phi_r`/`Phi_s` rules, plus the optional SAE basis | CPU |
+| `analyze.py` | runs both rules → coupling test → isotropy defect → `alpha` | CPU |
 | `eps_sweep.py` | group-proportion sweep, the predicted decay law | CPU |
 | `common.py` | shared estimators | CPU |
 
@@ -149,14 +169,17 @@ the imbalance lives.
 
 ## How `Phi_r` / `Phi_s` are identified
 
-Waterbirds annotates the spurious attribute directly — `metadata.csv` has
-`place` (land/water) next to `y` (landbird/waterbird). The default
-**two-concept** rule decomposes each feature over the four `(y, place)` cells as
-a 2×2 factorial and classifies it by which factor it responds to, using
-unweighted cell means so the small disagreeing cells still count.
+Both rules always run. They differ in what information they use:
 
-The **sign-flip** rule from the Colored-MNIST experiment runs alongside as an
-independent cross-check; `results.md` reports the agreement between them.
+- **two-concept** — Waterbirds annotates the spurious attribute directly, so
+  `metadata.csv` has `place` (land/water) next to `y` (landbird/waterbird).
+  Each feature is decomposed over the four `(y, place)` cells as a 2×2
+  factorial and classified by which factor it responds to, using unweighted
+  cell means so the small disagreeing cells still count.
+- **sign-flip** — the Colored-MNIST rule, which needs only the group index and
+  so still works where the spurious attribute is unlabelled.
+
+`--sae` changes the *basis* both rules run on, not the rules themselves.
 
 On a Waterbirds-shaped toy with a known split, mean F1 across seeds in a
 weak-signal regime:

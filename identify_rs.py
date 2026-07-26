@@ -1,45 +1,67 @@
 """
 identify_rs.py -- Splitting a frozen representation into Phi_r and Phi_s.
 
-This is a library, called by analyze.py; it has no CLI of its own. To inspect
-the split on its own from the repository root:
+BASIS AND RULE ARE SEPARATE
+===========================
+Identification involves two decisions that are easily confused.
 
-    python -c "
-    from common import FeatureBundle, standardize
-    from identify_rs import sign_flip_identify, tau_sensitivity
-    b = FeatureBundle.load('features_waterbirds_train.npz')
-    phi = standardize(b.phi)
-    r = sign_flip_identify(phi, b.y, b.g, tau=0.2)
-    print('n_r', r['n_r'], 'n_s', r['n_s'], 'weak', r['n_weak'])
-    for row in tau_sensitivity(phi, b.y, b.g): print(row)
-    "
+  (1) THE BASIS -- which columns are the "features"?
+        raw : the coordinates of Phi itself. Cheap, nothing to fit.
+        SAE : the activations of a sparse autoencoder fitted to Phi
+              (`fit_sae`). Slower, needs torch, but the columns are more
+              monosemantic. Use when raw coordinates are polysemantic --
+              i.e. when the raw run classifies most features as "weak".
 
-This deliberately does NOT use Grad-CAM. Grad-CAM produces a spatial saliency
-map over convolutional feature maps; applied to a flat penultimate vector
-feeding a linear head it degenerates to gradient-times-activation, and more
-importantly it answers the wrong question. Attribution through the trained head
-identifies the coordinates the HEAD RELIES ON, whereas the manuscript's
-r/s split is defined by whether the coordinate's relationship to the label is
-GROUP-DEPENDENT. A coordinate can be heavily relied upon and perfectly causal.
+  (2) THE RULE -- how is a column classified as r-type or s-type?
+        two-concept : `two_concept_identify(cols, y, place)`
+        sign-flip   : `sign_flip_identify(cols, concept, g)`
 
-Two rules are provided, and the choice between them matters.
+Neither rule requires an SAE: `two_concept_identify` works perfectly well on
+raw coordinates, and `fit_sae` commits you to nothing. `analyze.py` therefore
+exposes the basis as its only switch (`--sae`) and always runs BOTH rules on
+whichever basis was chosen, reporting their agreement.
 
-PREFERRED -- `two_concept_identify`. Waterbirds annotates the spurious
-attribute directly: `metadata.csv` carries `place` (land/water) next to `y`
-(landbird/waterbird). Each feature is decomposed over the four (y, place) cells
-as a 2x2 factorial and classified by which factor it responds to. This uses the
-annotation instead of inferring around it. See that function for the details.
+Whichever basis is chosen, the columns handed to a rule are written c_k below.
+For the raw basis c_k is simply the k-th coordinate of Phi.
 
-CROSS-CHECK -- `sign_flip_identify`, the rule validated in the manuscript's
-Colored-MNIST experiment, described below. It requires only the group index, so
-it applies where no attribute annotation exists, and running both gives an
-independent corroboration of the split (`agreement`).
+RULE 1 -- two-concept (preferred where the attribute is annotated)
+==================================================================
+Waterbirds annotates the spurious attribute directly: `metadata.csv` carries
+`place` (land/water) next to `y` (landbird/waterbird). Each feature is
+decomposed over the four (y, place) cells as a 2x2 factorial and classified by
+which factor it responds to. This uses the annotation rather than inferring
+around it. Full detail in `two_concept_identify`.
 
-Why the sign-flip rule still works on a binary concept
-------------------------------------------------------
-A natural objection is that Colored-MNIST had a quantitative concept (digit
-class) with an explicitly inverted intensity map, whereas Waterbirds has a
-binary label and nothing is "inverted" during image generation. Two answers:
+Requires: y and place. Not usable when the spurious attribute is unlabelled.
+
+RULE 2 -- sign-flip (the Colored-MNIST rule; cross-check, or when `place` is absent)
+===================================================================================
+Let `concept` be the causal concept (digit class in Colored-MNIST; the bird
+label y in Waterbirds). Define
+
+    rho_0(k) = corr(c_k, concept | g = 0),
+    rho_1(k) = corr(c_k, concept | g = 1).
+
+A causal (r-type) feature tracks the concept itself, so its correlation has the
+SAME sign in both groups. A spurious (s-type) feature tracks the group-dependent
+attribute, whose relation to the concept REVERSES between groups, so its
+correlation flips sign. Hence
+
+    f_k is r-type  if rho_0 rho_1 > 0 and min(|rho_0|, |rho_1|) >= tau,
+    f_k is s-type  if rho_0 rho_1 < 0 and min(|rho_0|, |rho_1|) >= tau,
+    f_k is weak    otherwise.
+
+This is the operational content of A != B in the manuscript's Definition
+(features-mediated linear spurious correlation).
+
+Requires: only y and the group index g -- so it still applies when the spurious
+attribute is not annotated. `agreement()` compares the two rules' splits.
+
+Why sign-flip still works on a binary concept
+---------------------------------------------
+A natural objection: Colored-MNIST had a quantitative concept (digit class)
+with an explicitly inverted intensity map, whereas Waterbirds has a binary
+label and nothing is "inverted" during image generation. Two answers:
 
   * With binary y, corr(c_k, y | g) is the point-biserial correlation, i.e. the
     standardised difference of class means within group g. Correlation needs
@@ -52,37 +74,29 @@ binary label and nothing is "inverted" during image generation. Two answers:
     Colored-MNIST the flip was engineered through the intensity map; here it is
     inherited from the standard majority/minority partition.
 
-The rule
---------
-Let c_k be the activation of feature k and let `concept` be the causal concept
-(the digit class in Colored-MNIST; the bird label y in Waterbirds, where the
-group is defined by whether the background agrees with the label). Define
+NOT GRAD-CAM, AND WHY
+=====================
+Grad-CAM produces a spatial saliency map over convolutional feature maps;
+applied to a flat penultimate vector feeding a linear head it degenerates to
+gradient-times-activation, and more importantly it answers the wrong question.
+Attribution through the trained head identifies the coordinates the HEAD RELIES
+ON, whereas the r/s split is defined by which factor a coordinate responds to.
+A coordinate can be heavily relied upon and perfectly causal.
 
-    rho_0(k) = corr(c_k, concept | g = 0),
-    rho_1(k) = corr(c_k, concept | g = 1).
+USAGE
+=====
+A library, called by analyze.py; no CLI of its own. From the repository root:
 
-A causal (r-type) feature tracks the concept itself, so its correlation has the
-SAME sign in both groups. A spurious (s-type) feature tracks the group-dependent
-attribute, whose relationship to the concept REVERSES between groups, so its
-correlation flips sign. Hence
-
-    f_k is r-type  if rho_0 rho_1 > 0 and min(|rho_0|, |rho_1|) >= tau,
-    f_k is s-type  if rho_0 rho_1 < 0 and min(|rho_0|, |rho_1|) >= tau,
-    f_k is weak    otherwise.
-
-This is exactly the operational content of A != B in the manuscript's
-Definition (features-mediated linear spurious correlation): the two groups are
-distinguished by the sign of the alignment between the spurious block and the
-causal signal.
-
-Two routes are provided:
-
-  * `sign_flip_identify` applies the rule directly to the coordinates of Phi.
-    Cheap, no extra training, and adequate for post-ReLU backbone features.
-  * `sae_identify` first fits a sparse autoencoder to Phi and applies the rule
-    to the dictionary activations. This is the exact analogue of the
-    manuscript's Colored-MNIST protocol and is preferable when raw coordinates
-    are polysemantic (feature superposition), but it requires torch.
+    python -c "
+    from common import FeatureBundle, standardize
+    from identify_rs import two_concept_identify, sign_flip_identify, agreement
+    b = FeatureBundle.load('features_waterbirds_test.npz')
+    phi = standardize(b.phi)
+    two  = two_concept_identify(phi, b.y, b.place)   # raw basis, two-concept
+    flip = sign_flip_identify(phi, b.y, b.g)         # raw basis, sign-flip
+    print(two['n_r'], two['n_s'], '|', flip['n_r'], flip['n_s'])
+    print(agreement(two, flip, phi.shape[1]))
+    "
 """
 
 from __future__ import annotations
@@ -306,20 +320,28 @@ def tau_sensitivity(
     return rows
 
 
-def sae_identify(
+def fit_sae(
     phi: np.ndarray,
-    concept: np.ndarray,
-    g: np.ndarray,
     d_hidden_mult: int = 4,
     l1: float = 0.03,
     epochs: int = 60,
     lr: float = 1e-3,
     batch: int = 512,
-    tau: float = 0.2,
     seed: int = 0,
     device: str | None = None,
 ) -> dict:
-    """Fit a sparse autoencoder to phi, then apply the sign-flip rule to it.
+    """Fit a sparse autoencoder to phi and return its activations.
+
+    This is a BASIS CHOICE ONLY -- it classifies nothing. Feed the returned
+    `activations` to whichever rule you want:
+
+        acts = fit_sae(phi)["activations"]
+        two_concept_identify(acts, y, place)     # SAE basis + two-concept
+        sign_flip_identify(acts, y, g)           # SAE basis + sign-flip
+
+    Separating this from classification is deliberate: an earlier version fused
+    the two, so asking for an SAE silently forced the sign-flip rule and made
+    the SAE basis unavailable to the two-concept rule.
 
     Mirrors the manuscript's Colored-MNIST protocol: a dictionary
     M in R^{d_hidden x d} is learned with an L1 penalty on the activations,
@@ -327,20 +349,19 @@ def sae_identify(
         c = ReLU(M phi + b),   phi_hat = M^T c,
         loss = || phi - phi_hat ||^2 + l1 * || c ||_1,
 
-    so that c_k is the activation of dictionary feature k. The sign-flip rule is
-    then applied to c rather than to the raw coordinates of phi, which is the
-    right move when raw coordinates are polysemantic (several concepts sharing
-    one coordinate through superposition).
+    so that c_k is the activation of dictionary feature k. Working in this basis
+    is the right move when raw coordinates are polysemantic (several concepts
+    sharing one coordinate through superposition), which shows up as most raw
+    features being classified "weak".
 
-    Requires torch. If torch is unavailable, use `sign_flip_identify` directly
-    on phi instead.
+    Requires torch. Without it, use the raw basis -- pass phi to a rule directly.
     """
     try:
         import torch
     except ImportError as e:  # pragma: no cover
         raise ImportError(
-            "sae_identify requires torch. Either install torch or use "
-            "sign_flip_identify(phi, concept, g) on the raw coordinates."
+            "fit_sae requires torch. Without torch, use the raw basis: pass "
+            "phi straight to two_concept_identify or sign_flip_identify."
         ) from e
 
     torch.manual_seed(seed)
@@ -376,11 +397,9 @@ def sae_identify(
         avg_active = (C > 0).float().sum(dim=1).mean().item()
         acts = C.cpu().numpy().astype(np.float64)
 
-    res = sign_flip_identify(acts, concept, g, tau=tau)
-    res.update({
+    return {
         "activations": acts,
         "var_explained": float(var_explained),
         "avg_active": float(avg_active),
         "d_hidden": d_h,
-    })
-    return res
+    }
