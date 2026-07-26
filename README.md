@@ -1,5 +1,13 @@
 # Rebuttal experiments — representation-level spuriousness
 
+## Setup
+
+```bash
+pip install torch numpy matplotlib scipy scikit-learn pandas
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
 Standalone experiment code for the author-response period. Nothing here touches
 the manuscript sources; this folder is self-contained.
 
