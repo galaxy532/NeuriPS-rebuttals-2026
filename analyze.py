@@ -27,8 +27,24 @@ diagnostics, alpha -- so the two can be compared end to end, and their
 agreement is reported. Two rules reaching the same conclusion from different
 information is much harder to dismiss than either alone.
 
-The two commands write to different files, so neither overwrites the other.
-Override the stem with --out-prefix.
+Output names are derived, never typed
+-------------------------------------
+The output stem is built from the run itself: the split, the basis, and any
+knob set away from its default. So
+
+    python analyze.py                              -> results_test_raw.{json,md}
+    python analyze.py --sae                         -> results_test_sae.{json,md}
+    python analyze.py --sae --sae-l1 0.3 --sae-epochs 400
+                                    -> results_test_sae_l1-0.3_ep-400.{json,md}
+
+Two runs that differ in any parameter therefore land in different files
+automatically, and a run repeated with identical settings overwrites itself,
+which is what a redo should do. This is not a convenience: a sweep whose
+outputs silently overwrote each other would leave numbers on disk that no
+longer correspond to the settings you think produced them, and the results
+files are the only record -- there is no separate log. Every knob is also
+echoed inside the JSON, so a file can be identified from its contents alone
+even if it is renamed.
 
 Why the TEST split by default
 -----------------------------
@@ -80,6 +96,27 @@ from identify_rs import (
 
 RULES = ("two-concept", "sign-flip")
 
+# Single source of truth for every tunable default. The argument parser reads
+# its defaults from here, and `_auto_prefix` compares against the same values to
+# decide which knobs deserve a filename tag. Defining them once is what keeps
+# the two from drifting apart -- if a default were written out twice and only
+# one copy updated, the stem would stop reflecting the run.
+DEFAULTS = {
+    "tau": 0.15,
+    "purity": 0.60,
+    "quantile": 0.01,
+    "n_perm": 50,
+    "min_cell": 200,
+    "sae_l1": 0.03,
+    "sae_epochs": 60,
+}
+
+# Short tags used in the output stem, e.g. sae_l1=0.3 -> "l1-0.3".
+_TAGS = {
+    "tau": "tau", "purity": "pur", "quantile": "q", "n_perm": "nperm",
+    "min_cell": "mincell", "sae_l1": "l1", "sae_epochs": "ep",
+}
+
 
 def _downstream(source, y, g, ident, n_perm, quantile, seed, min_cell) -> dict:
     """Coupling test + isotropy diagnostics + alpha, for one r/s split.
@@ -129,10 +166,13 @@ def _downstream(source, y, g, ident, n_perm, quantile, seed, min_cell) -> dict:
     return out
 
 
-def run(bundle: FeatureBundle, tau: float = 0.15, n_perm: int = 200,
-        quantile: float = 0.01, use_sae: bool = False, seed: int = 0,
+def run(bundle: FeatureBundle, tau: float = DEFAULTS["tau"],
+        n_perm: int = DEFAULTS["n_perm"], quantile: float = DEFAULTS["quantile"],
+        use_sae: bool = False, seed: int = 0,
         use_stored_split: bool = False, do_standardize: bool = True,
-        purity: float = 0.60, min_cell: int = 200) -> dict:
+        purity: float = DEFAULTS["purity"], min_cell: int = DEFAULTS["min_cell"],
+        sae_l1: float = DEFAULTS["sae_l1"],
+        sae_epochs: int = DEFAULTS["sae_epochs"]) -> dict:
     phi = standardize(bundle.phi) if do_standardize else bundle.phi.copy()
     y, g = bundle.y, bundle.g
     res: dict = {
@@ -162,10 +202,20 @@ def run(bundle: FeatureBundle, tau: float = 0.15, n_perm: int = 200,
     # -- Step 2: the basis ---------------------------------------------------
     if use_sae:
         from identify_rs import fit_sae
-        sae = fit_sae(phi, seed=seed)
+        sae = fit_sae(phi, seed=seed, l1=sae_l1, epochs=sae_epochs)
+        # l1 and epochs are recorded next to the diagnostics they govern, so a
+        # results file states the dictionary it was computed from. `avg_active`
+        # is the L0 of the dictionary and is the number to read first: with
+        # M ~ N(0, 1/d) and b = 0 exactly half the pre-activations are positive
+        # at initialisation, so avg_active ~ d_hidden/2 means the L1 penalty has
+        # not moved the dictionary off its random start and the "sparse" in
+        # sparse autoencoder is not yet doing any work.
         res["sae"] = {"var_explained": sae["var_explained"],
                       "avg_active": sae["avg_active"],
-                      "d_hidden": sae["d_hidden"]}
+                      "d_hidden": sae["d_hidden"],
+                      "l1": sae_l1,
+                      "epochs": sae_epochs,
+                      "avg_active_at_init": sae["d_hidden"] / 2.0}
         source = sae["activations"]
     else:
         source = phi
@@ -311,6 +361,45 @@ def to_markdown(res: dict) -> str:
     return "\n".join(L)
 
 
+def _auto_prefix(args, res: dict) -> str:
+    """Build the output stem from the run's own settings.
+
+    The stem always carries the two things that change what is being measured
+    rather than how precisely: the split and the basis. On top of that, every
+    knob set AWAY FROM ITS DEFAULT contributes a short tag.
+
+    Only non-default knobs are tagged, which is what keeps the common cases
+    short -- a plain `python analyze.py` still writes `results_test_raw`, the
+    name the earlier runs already used, so nothing that exists is orphaned.
+    A sweep, by contrast, separates itself automatically:
+
+        --sae --sae-l1 0.3 --sae-epochs 400  ->  results_test_sae_l1-0.3_ep-400
+
+    Re-running an identical configuration overwrites its own file, which is the
+    correct behaviour for a redo: the previous copy of that file was, by
+    construction, computed from exactly the same settings.
+
+    The SAE knobs are only consulted on the SAE basis. Tagging a raw-basis run
+    with an l1 value would be actively misleading, since nothing in that run
+    ever touched the autoencoder.
+    """
+    split = str(res.get("meta", {}).get("split", "")) or \
+        os.path.splitext(os.path.basename(args.bundle))[0].split("_")[-1]
+    parts = [f"results_{split}_{res['basis']}"]
+
+    keys = ["tau", "purity", "quantile", "n_perm", "min_cell"]
+    if args.sae:
+        keys = ["sae_l1", "sae_epochs"] + keys
+    for k in keys:
+        v = getattr(args, k)
+        if v != DEFAULTS[k]:
+            parts.append(f"{_TAGS[k]}-{v:g}")
+
+    if getattr(args, "no_standardize", False):
+        parts.append("nostd")
+    return "_".join(parts)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Coupling test, isotropy diagnostics and alpha on a frozen "
@@ -325,24 +414,42 @@ def main() -> None:
                     help="use SAE activations as the basis instead of the raw "
                          "Phi coordinates (needs torch). Worth trying only if "
                          "the raw run reports most features as weak.")
-    ap.add_argument("--tau", type=float, default=0.15,
+    ap.add_argument("--sae-l1", type=float, default=DEFAULTS["sae_l1"],
+                    help="L1 coefficient on the SAE activations. Raise it if the "
+                         "run reports avg_active anywhere near d_hidden/2, which "
+                         "is the initialisation value and means the penalty has "
+                         "not sparsified anything. Aim for avg_active in the "
+                         "20-200 range at var_explained >= 0.8; if var_explained "
+                         "collapses below ~0.7 the penalty has overshot.")
+    ap.add_argument("--sae-epochs", type=int, default=DEFAULTS["sae_epochs"],
+                    help="SAE training epochs. Note this is far fewer optimiser "
+                         "steps than it sounds: at batch=512 a 5794-row bundle "
+                         "gives 12 steps per epoch, so the default 60 is only "
+                         "~720 Adam steps, where sparse autoencoders normally "
+                         "need tens of thousands. If avg_active is stuck near "
+                         "its initialisation value, raise this before concluding "
+                         "that --sae-l1 is too small.")
+    ap.add_argument("--tau", type=float, default=DEFAULTS["tau"],
                     help="minimum response strength for a feature to be classified")
-    ap.add_argument("--purity", type=float, default=0.60,
+    ap.add_argument("--purity", type=float, default=DEFAULTS["purity"],
                     help="two-concept: min |beta_y|/(|beta_y|+|beta_p|) to call "
                          "a feature r-type (and 1-purity for s-type)")
-    ap.add_argument("--n-perm", type=int, default=200,
+    ap.add_argument("--n-perm", type=int, default=DEFAULTS["n_perm"],
                     help="permutations for the coupling null; the p-value floor "
-                         "is 1/(1+n_perm)")
-    ap.add_argument("--min-cell", type=int, default=200,
+                         "is 1/(1+n_perm), so 50 gives 0.0196. The coupling test "
+                         "dominates the runtime (n_perm x n_splits ridge fits per "
+                         "cell, per rule), and every p-value reported so far has "
+                         "sat at the floor, so the extra resolution of n_perm=200 "
+                         "was not being used. Raise it only if a p-value needs to "
+                         "be quoted below 0.02.")
+    ap.add_argument("--min-cell", type=int, default=DEFAULTS["min_cell"],
                     help="refuse coupling cells smaller than this")
-    ap.add_argument("--quantile", type=float, default=0.01,
+    ap.add_argument("--quantile", type=float, default=DEFAULTS["quantile"],
                     help="lower quantile used as the ess-inf proxy for margins")
     ap.add_argument("--use-stored-split", action="store_true",
                     help="validation only: use idx_r/idx_s stored in the bundle")
     ap.add_argument("--no-standardize", action="store_true",
                     help="validation only: skip per-coordinate standardisation")
-    ap.add_argument("--out-prefix", default=None,
-                    help="output stem; derived from the bundle and basis if omitted")
     args = ap.parse_args()
 
     bundle = FeatureBundle.load(args.bundle)
@@ -354,13 +461,16 @@ def main() -> None:
               quantile=args.quantile, use_sae=args.sae,
               use_stored_split=args.use_stored_split,
               do_standardize=not args.no_standardize,
-              purity=args.purity, min_cell=args.min_cell)
+              purity=args.purity, min_cell=args.min_cell,
+              sae_l1=args.sae_l1, sae_epochs=args.sae_epochs)
 
-    prefix = args.out_prefix
-    if prefix is None:
-        split = str(res.get("meta", {}).get("split", "")) or \
-            os.path.splitext(os.path.basename(args.bundle))[0].split("_")[-1]
-        prefix = f"results_{split}_{res['basis']}"
+    # Echo every setting into the JSON as well as into the filename, so a
+    # results file remains self-identifying even if it is renamed or quoted
+    # out of context.
+    res["settings"] = {k: getattr(args, k) for k in DEFAULTS}
+    res["settings"].update({"bundle": args.bundle, "sae": bool(args.sae)})
+
+    prefix = _auto_prefix(args, res)
 
     with open(f"{prefix}.json", "w") as f:
         json.dump(res, f, indent=2, default=float)

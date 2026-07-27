@@ -185,8 +185,21 @@ def fit_margin_direction(
     minority holds the geometric margin advantage) or in the "mirror" case, for
     which the manuscript prescribes substituting (mu_A, gamma-tilde_min) <-
     (mu_B, gamma-tilde_maj).
+
+    A note on the solver tolerances. An earlier version used tol=1e-9 with
+    max_iter=200_000. At C=1e6 liblinear's dual coordinate descent cannot drive
+    the dual violation anywhere near 1e-9, so `n_iter_` hit `max_iter` on every
+    input tested: the solver always burned all 200,000 passes over the data and
+    then returned a non-converged `v` regardless. That is a fixed cost of
+    minutes at d_r in the hundreds and over ten minutes at d_r ~ 2000, bought
+    nothing, and -- because it never converged -- gave no accuracy guarantee to
+    trade away. tol=1e-4 with max_iter=20_000 is an attainable stopping
+    criterion rather than an unreachable one. If liblinear still warns about
+    convergence, that is informative: it means the r-block is far from
+    separable at this C, which is exactly the situation the RuntimeWarning
+    below is meant to surface.
     """
-    svm = LinearSVC(C=C, fit_intercept=False, loss="hinge", max_iter=200_000, tol=1e-9)
+    svm = LinearSVC(C=C, fit_intercept=False, loss="hinge", max_iter=20_000, tol=1e-4)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         svm.fit(phi_r, y)
