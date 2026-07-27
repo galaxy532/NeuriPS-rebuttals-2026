@@ -1,0 +1,312 @@
+{
+  "n": 5794,
+  "d": 2048,
+  "eps_empirical": 0.5,
+  "meta": {
+    "source": "waterbirds",
+    "split": "test",
+    "eps": 0.5,
+    "d": 2048,
+    "epochs": 10
+  },
+  "standardised": true,
+  "basis": "raw",
+  "tau": 0.15,
+  "rules": {
+    "two-concept": {
+      "identification": {
+        "n_r": 1063,
+        "n_s": 320,
+        "n_weak": 665,
+        "cell_sizes": {
+          "y=+1,place=+1": 642,
+          "y=+1,place=-1": 642,
+          "y=-1,place=+1": 2255,
+          "y=-1,place=-1": 2255
+        },
+        "min_cell": 642,
+        "se_approx": 0.015815701765959676,
+        "n_conjunction": 19,
+        "purity": 0.6
+      },
+      "coupling": {
+        "cells": [
+          {
+            "y": -1,
+            "g": 0,
+            "n": 2255,
+            "r2": 0.7288545353402716,
+            "null_mean": -1.3982447396587543,
+            "null_q95": -1.3784278659458753,
+            "p": 0.0196078431372549,
+            "note": ""
+          },
+          {
+            "y": -1,
+            "g": 1,
+            "n": 2255,
+            "r2": 0.7466649919494451,
+            "null_mean": -1.394529681984162,
+            "null_q95": -1.3727387656297492,
+            "p": 0.0196078431372549,
+            "note": ""
+          },
+          {
+            "y": 1,
+            "g": 0,
+            "n": 642,
+            "r2": 0.6886965150455516,
+            "null_mean": -1.798937563953929,
+            "null_q95": -1.7414133445865179,
+            "p": 0.0196078431372549,
+            "note": ""
+          },
+          {
+            "y": 1,
+            "g": 1,
+            "n": 642,
+            "r2": 0.6677477856684471,
+            "null_mean": -1.821124746760457,
+            "null_q95": -1.7574295466607401,
+            "p": 0.0196078431372549,
+            "note": ""
+          }
+        ],
+        "pooled_r2": 0.8601551106597898,
+        "mean_within_cell_r2": 0.7079909570009288,
+        "n_perm": 50,
+        "min_cell_size": 642,
+        "n_cells_refused": 0,
+        "n_cells_unreliable": 0,
+        "p_value_floor": 0.0196078431372549
+      },
+      "margins": {
+        "gamma_tilde_maj": 1.0,
+        "gamma_tilde_min": 1.1571478626570977,
+        "orientation": "standard",
+        "separable_fraction": 0.989989644459786,
+        "quantile_used": 0.01,
+        "raw_min_margin": {
+          "0": -8.09157583833168,
+          "1": -6.83483701112888
+        }
+      },
+      "isotropy": {
+        "mu_A": 0.7166261173036057,
+        "mu_B": 0.6689347085051391,
+        "mu": 0.20322223618560253,
+        "defects": {
+          "A^T A": 0.8883785934253252,
+          "A^T B": 0.991964433414358,
+          "B^T B": 0.9258271591351925,
+          "B^T A": 0.9900297092295981
+        },
+        "defects_scaled": {
+          "A^T A": 0.09855509367440676,
+          "A^T B": 0.11531318429701971,
+          "B^T B": 0.10998559510136004,
+          "B^T A": 0.10337045819442206
+        },
+        "degenerate": {
+          "A^T A": false,
+          "A^T B": false,
+          "B^T B": false,
+          "B^T A": false
+        },
+        "max_defect": 0.991964433414358,
+        "d_star": 94.26695940864815,
+        "d_star_relative": 1.0,
+        "d_star_sensitivity": {
+          "1e-06": 1.0,
+          "0.0001": 1.0,
+          "0.001": 1.0,
+          "0.01": 1.0,
+          "0.1": 0.9997959906842033
+        },
+        "dim_K": 0,
+        "attractive_condition_holds": true,
+        "d_s_ge_2d_r": false,
+        "d_r": 1063,
+        "d_s": 320
+      },
+      "alpha": {
+        "alpha": 0.8110712198009845,
+        "orientation": "standard",
+        "advantaged_group": "minority",
+        "gamma_tilde_advantaged": 1.1571478626570977,
+        "mu_diagonal_used": 0.7166261173036057,
+        "mu": 0.20322223618560253,
+        "regime": "alpha < 1 (balancing helps)",
+        "predicted_minority_exponent": 1.0,
+        "critical_gamma": 1.4266908187680871
+      }
+    },
+    "sign-flip": {
+      "identification": {
+        "n_r": 769,
+        "n_s": 182,
+        "n_weak": 1097
+      },
+      "coupling": {
+        "cells": [
+          {
+            "y": -1,
+            "g": 0,
+            "n": 2255,
+            "r2": 0.7476778817117761,
+            "null_mean": -0.7464061560553911,
+            "null_q95": -0.7364995361584276,
+            "p": 0.0196078431372549,
+            "note": ""
+          },
+          {
+            "y": -1,
+            "g": 1,
+            "n": 2255,
+            "r2": 0.7796784779037782,
+            "null_mean": -0.7458530097128129,
+            "null_q95": -0.730475623805923,
+            "p": 0.0196078431372549,
+            "note": ""
+          },
+          {
+            "y": 1,
+            "g": 0,
+            "n": 642,
+            "r2": 0.5846633239542814,
+            "null_mean": -2.520532078956924,
+            "null_q95": -2.406211766107886,
+            "p": 0.0196078431372549,
+            "note": ""
+          },
+          {
+            "y": 1,
+            "g": 1,
+            "n": 642,
+            "r2": 0.5036890950575987,
+            "null_mean": -2.580000017183466,
+            "null_q95": -2.507510777670087,
+            "p": 0.0196078431372549,
+            "note": ""
+          }
+        ],
+        "pooled_r2": 0.85156702464183,
+        "mean_within_cell_r2": 0.6539271946568587,
+        "n_perm": 50,
+        "min_cell_size": 642,
+        "n_cells_refused": 0,
+        "n_cells_unreliable": 0,
+        "p_value_floor": 0.0196078431372549
+      },
+      "margins": {
+        "gamma_tilde_maj": NaN,
+        "gamma_tilde_min": NaN,
+        "orientation": "mirror",
+        "separable_fraction": 0.90714532274767,
+        "quantile_used": 0.01,
+        "raw_min_margin": {
+          "0": -3127223850.7462964,
+          "1": -7183463410.699329
+        }
+      },
+      "isotropy": {
+        "mu_A": 0.5184318154282669,
+        "mu_B": 0.4885061128901818,
+        "mu": 0.21085888594530852,
+        "defects": {
+          "A^T A": 0.9481012282885463,
+          "A^T B": 0.985745489047216,
+          "B^T B": 0.9355382783737286,
+          "B^T A": 0.9910991725022474
+        },
+        "defects_scaled": {
+          "A^T A": 0.11646304069343374,
+          "A^T B": 0.08968933870363775,
+          "B^T B": 0.08682943104321093,
+          "B^T A": 0.11396446402165693
+        },
+        "degenerate": {
+          "A^T A": false,
+          "A^T B": false,
+          "B^T B": false,
+          "B^T A": false
+        },
+        "max_defect": 0.9910991725022474,
+        "d_star": 74.82633596283452,
+        "d_star_relative": 1.0,
+        "d_star_sensitivity": {
+          "1e-06": 1.0,
+          "0.0001": 1.0,
+          "0.001": 1.0,
+          "0.01": 1.0,
+          "0.1": 0.9990588295805499
+        },
+        "dim_K": 0,
+        "attractive_condition_holds": true,
+        "d_s_ge_2d_r": false,
+        "d_r": 769,
+        "d_s": 182
+      },
+      "alpha": {
+        "alpha": NaN,
+        "orientation": "mirror",
+        "advantaged_group": "majority",
+        "gamma_tilde_advantaged": NaN,
+        "mu_diagonal_used": 0.4885061128901818,
+        "mu": 0.21085888594530852,
+        "regime": "alpha >= 1 (geometry dominates)",
+        "predicted_minority_exponent": NaN,
+        "critical_gamma": 1.229297757292433
+      }
+    }
+  },
+  "rule_agreement": {
+    "jaccard_r": 0.7218045112781954,
+    "jaccard_s": 0.5638629283489096,
+    "n_labelled_by_both": 949,
+    "concordance_on_shared": 1.0
+  },
+  "tau_sensitivity": [
+    {
+      "tau": 0.05,
+      "n_r": 1205,
+      "n_s": 419
+    },
+    {
+      "tau": 0.1,
+      "n_r": 975,
+      "n_s": 277
+    },
+    {
+      "tau": 0.15,
+      "n_r": 769,
+      "n_s": 182
+    },
+    {
+      "tau": 0.2,
+      "n_r": 576,
+      "n_s": 119
+    },
+    {
+      "tau": 0.3,
+      "n_r": 281,
+      "n_s": 45
+    },
+    {
+      "tau": 0.4,
+      "n_r": 96,
+      "n_s": 8
+    }
+  ],
+  "settings": {
+    "tau": 0.15,
+    "purity": 0.6,
+    "quantile": 0.01,
+    "n_perm": 50,
+    "min_cell": 200,
+    "sae_l1": 0.03,
+    "sae_epochs": 60,
+    "bundle": "features_waterbirds_test.npz",
+    "sae": false
+  }
+}
