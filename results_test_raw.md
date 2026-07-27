@@ -2,7 +2,8 @@
 
 - n = 5794, d = 2048, empirical eps = 0.5000
 - basis: **raw**, tau = 0.15
-- agreement between the two rules: Jaccard r = 0.722, s = 0.564; concordance on the 949 features both label = 1.000
+- agreement between the two rules: Jaccard r = 0.722, s = 0.564; concordance on the 949 features both label = 1.000 (0 discordant)
+  - zero discordant features, so by the rule of three the 95% upper bound on the true discordance rate is 0.3%
 
 **Threshold sensitivity (sign-flip rule)**
 
@@ -21,7 +22,12 @@
 
 - split: n_r = 1063, n_s = 320, weak = 665
 - (y, place) cell sizes: y=+1,place=+1: 642, y=+1,place=-1: 642, y=-1,place=+1: 2255, y=-1,place=-1: 2255  (smallest 642)
-- approx. SE of each contrast: 0.0158; conjunction-dominated features: 19
+- approx. SE of each contrast: 0.0158
+- conjunction-dominated features (|beta_int| the largest of the three contrasts). Since y*place = 1 - 2g in Waterbirds, beta_int is the group contrast, so these respond to GROUP membership more strongly than to bird type or background -- features the Phi = (r, s) partition has no slot for.
+  - among the 1724 features passing tau: **0** (0.0%)
+  - over all columns, including those too weak to classify: 19 (0.9%), against a chance rate of 33.3% under exchangeable contrasts
+  - the unrestricted rate is at or below chance, i.e. consistent with noise, and is NOT evidence that the (r, s) partition is violated
+  - the two rates are not comparable to each other: passing tau selects on beta_y and beta_p being large, which depresses the restricted rate well below 1/3 even on pure noise (~0.11 in testing). Only the unrestricted rate has 1/3 as its null; the restricted one needs an estimated reference.
 
 **Within-(y,g)-cell coupling, Phi_r -> Phi_s (cross-validated R^2, block-permutation null)**
 
@@ -41,22 +47,23 @@ p-value floor with 50 permutations: 0.0196. Cells below the minimum are refused,
 
 | product | defect (angle) | defect (scaled) | degenerate |
 |---|---|---|---|
-| A^T A | 0.8884 | 0.0986 |  |
-| A^T B | 0.9920 | 0.1153 |  |
-| B^T B | 0.9258 | 0.1100 |  |
-| B^T A | 0.9900 | 0.1034 |  |
+| A^T A | 0.8845 | 0.0974 |  |
+| A^T B | 0.9919 | 0.1141 |  |
+| B^T B | 0.9225 | 0.1090 |  |
+| B^T A | 0.9900 | 0.1023 |  |
 
 - 'degenerate' marks products whose M v is negligible, where the angle-based defect is 0/0 and only the scaled column is meaningful.
-- mu_A = 0.7166, mu_B = 0.6689, mu = +0.2032
+- mu_A = 0.7231, mu_B = 0.6792, mu = +0.2017
 - attractive condition -1 <= mu < min(mu_A, mu_B): True
 - d_r = 1063, d_s = 320, d_s >= 2 d_r: False, dim K = 0
-- d* = 94.2670 (relative 1.0000); sensitivity to the rank cutoff: 1e-06: 1.000, 0.0001: 1.000, 0.001: 1.000, 0.01: 1.000, 0.1: 1.000
+- d* = 94.8349 (relative 1.0000); sensitivity to the rank cutoff: 1e-06: 1.000, 0.0001: 1.000, 0.001: 1.000, 0.01: 1.000, 0.1: 1.000
+- **d\* is VACUOUS on this run.** dim K = 0, which is forced whenever d_s <= 2 d_r and the estimated operators are full rank: M_stack is (2 d_r, d_s), so its rank saturates at d_s, K = {0}, Pi_{K^perp} = I, and d*_relative = 1.0000 exactly as arithmetic. It is restating the `d_s >= 2 d_r` flag, not measuring a distance, and the rank-cutoff sweep above cannot change that. Do not quote it.
 
 **Margins and the exponent alpha**
 
-- gamma-tilde_maj = 1.0000, gamma-tilde_min = 1.1571 (orientation: standard, ess-inf proxy: 1% quantile)
-- r-block separable fraction = 0.9900
-- **alpha = 0.8111** -> alpha < 1 (balancing helps); predicted minority exponent max(alpha,1) = 1.0000
+- gamma-tilde_maj = 1.0000, gamma-tilde_min = 1.6403 (orientation: standard, ess-inf proxy: 1% quantile)
+- r-block IS separable at the 1% quantile; fraction correctly classified = 0.9934
+- **alpha = 1.1439** -> alpha >= 1 (geometry dominates); predicted minority exponent max(alpha,1) = 1.1439
 
 ---
 
@@ -82,19 +89,20 @@ p-value floor with 50 permutations: 0.0196. Cells below the minimum are refused,
 
 | product | defect (angle) | defect (scaled) | degenerate |
 |---|---|---|---|
-| A^T A | 0.9481 | 0.1165 |  |
-| A^T B | 0.9857 | 0.0897 |  |
-| B^T B | 0.9355 | 0.0868 |  |
-| B^T A | 0.9911 | 0.1140 |  |
+| A^T A | 0.9484 | 0.1184 |  |
+| A^T B | 0.9843 | 0.0889 |  |
+| B^T B | 0.9364 | 0.0867 |  |
+| B^T A | 0.9906 | 0.1157 |  |
 
 - 'degenerate' marks products whose M v is negligible, where the angle-based defect is 0/0 and only the scaled column is meaningful.
-- mu_A = 0.5184, mu_B = 0.4885, mu = +0.2109
+- mu_A = 0.5255, mu_B = 0.4841, mu = +0.2197
 - attractive condition -1 <= mu < min(mu_A, mu_B): True
 - d_r = 769, d_s = 182, d_s >= 2 d_r: False, dim K = 0
-- d* = 74.8263 (relative 1.0000); sensitivity to the rank cutoff: 1e-06: 1.000, 0.0001: 1.000, 0.001: 1.000, 0.01: 1.000, 0.1: 0.999
+- d* = 74.9177 (relative 1.0000); sensitivity to the rank cutoff: 1e-06: 1.000, 0.0001: 1.000, 0.001: 1.000, 0.01: 1.000, 0.1: 0.999
+- **d\* is VACUOUS on this run.** dim K = 0, which is forced whenever d_s <= 2 d_r and the estimated operators are full rank: M_stack is (2 d_r, d_s), so its rank saturates at d_s, K = {0}, Pi_{K^perp} = I, and d*_relative = 1.0000 exactly as arithmetic. It is restating the `d_s >= 2 d_r` flag, not measuring a distance, and the rank-cutoff sweep above cannot change that. Do not quote it.
 
 **Margins and the exponent alpha**
 
-- gamma-tilde_maj = nan, gamma-tilde_min = nan (orientation: mirror, ess-inf proxy: 1% quantile)
-- r-block separable fraction = 0.9071
-- **alpha = nan** -> alpha >= 1 (geometry dominates); predicted minority exponent max(alpha,1) = nan
+- gamma-tilde_maj = nan, gamma-tilde_min = nan (orientation: undefined, ess-inf proxy: 1% quantile)
+- **r-block is NOT separable at the 1% quantile.** Only 90.02% of points are correctly classified by v, so gamma-tilde_g above are nan and the orientation is undefined rather than 'mirror'. The billions in `raw_min_margin` are an artefact of the 1e-9 clamp, not measurements.
+- **alpha: NOT ESTIMABLE.** the r-block is not separable at the 1% quantile -- only 90.02% of points are correctly classified by v, so the group r-margins gamma-tilde_g have no positive common scale and the WLOG min_g gamma-tilde_g = 1 cannot be imposed. alpha is a statement about a separable r-block and there is nothing here for it to describe. No regime is claimed for this rule.

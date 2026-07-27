@@ -26,7 +26,12 @@
         },
         "min_cell": 642,
         "se_approx": 0.015815701765959676,
-        "n_conjunction": 19,
+        "n_conjunction": 0,
+        "n_strong": 1724,
+        "frac_conjunction": 0.0,
+        "n_conjunction_all": 19,
+        "frac_conjunction_all": 0.00927734375,
+        "conjunction_chance_rate_all": 0.3333333333333333,
         "purity": 0.6
       },
       "coupling": {
@@ -82,30 +87,32 @@
       },
       "margins": {
         "gamma_tilde_maj": 1.0,
-        "gamma_tilde_min": 1.1571478626570977,
+        "gamma_tilde_min": 1.640269177355078,
         "orientation": "standard",
+        "separable_at_quantile": true,
+        "frac_correct": 0.9934414911977908,
         "separable_fraction": 0.989989644459786,
         "quantile_used": 0.01,
         "raw_min_margin": {
-          "0": -8.09157583833168,
-          "1": -6.83483701112888
+          "0": -9.462733550617054,
+          "1": -12.445596592533322
         }
       },
       "isotropy": {
-        "mu_A": 0.7166261173036057,
-        "mu_B": 0.6689347085051391,
-        "mu": 0.20322223618560253,
+        "mu_A": 0.7230638176249153,
+        "mu_B": 0.6791695520542231,
+        "mu": 0.2016850005045837,
         "defects": {
-          "A^T A": 0.8883785934253252,
-          "A^T B": 0.991964433414358,
-          "B^T B": 0.9258271591351925,
-          "B^T A": 0.9900297092295981
+          "A^T A": 0.8844816517568417,
+          "A^T B": 0.9919210874439174,
+          "B^T B": 0.9225418877565656,
+          "B^T A": 0.989973705640026
         },
         "defects_scaled": {
-          "A^T A": 0.09855509367440676,
-          "A^T B": 0.11531318429701971,
-          "B^T B": 0.10998559510136004,
-          "B^T A": 0.10337045819442206
+          "A^T A": 0.09742056720444209,
+          "A^T B": 0.11412975514006991,
+          "B^T B": 0.10897985215085733,
+          "B^T A": 0.10229727049852559
         },
         "degenerate": {
           "A^T A": false,
@@ -113,16 +120,17 @@
           "B^T B": false,
           "B^T A": false
         },
-        "max_defect": 0.991964433414358,
-        "d_star": 94.26695940864815,
+        "max_defect": 0.9919210874439174,
+        "d_star": 94.83485423235696,
         "d_star_relative": 1.0,
         "d_star_sensitivity": {
           "1e-06": 1.0,
           "0.0001": 1.0,
           "0.001": 1.0,
           "0.01": 1.0,
-          "0.1": 0.9997959906842033
+          "0.1": 0.9998090003877731
         },
+        "d_star_informative": false,
         "dim_K": 0,
         "attractive_condition_holds": true,
         "d_s_ge_2d_r": false,
@@ -130,15 +138,17 @@
         "d_s": 320
       },
       "alpha": {
-        "alpha": 0.8110712198009845,
+        "alpha": 1.1439430432324622,
+        "estimable": true,
+        "failure_reason": "",
         "orientation": "standard",
         "advantaged_group": "minority",
-        "gamma_tilde_advantaged": 1.1571478626570977,
-        "mu_diagonal_used": 0.7166261173036057,
-        "mu": 0.20322223618560253,
-        "regime": "alpha < 1 (balancing helps)",
-        "predicted_minority_exponent": 1.0,
-        "critical_gamma": 1.4266908187680871
+        "gamma_tilde_advantaged": 1.640269177355078,
+        "mu_diagonal_used": 0.7230638176249153,
+        "mu": 0.2016850005045837,
+        "regime": "alpha >= 1 (geometry dominates)",
+        "predicted_minority_exponent": 1.1439430432324622,
+        "critical_gamma": 1.4338731172490347
       }
     },
     "sign-flip": {
@@ -201,29 +211,31 @@
       "margins": {
         "gamma_tilde_maj": NaN,
         "gamma_tilde_min": NaN,
-        "orientation": "mirror",
-        "separable_fraction": 0.90714532274767,
+        "orientation": "undefined",
+        "separable_at_quantile": false,
+        "frac_correct": 0.9002416292716603,
+        "separable_fraction": 0.9002416292716603,
         "quantile_used": 0.01,
         "raw_min_margin": {
-          "0": -3127223850.7462964,
-          "1": -7183463410.699329
+          "0": -3252499942.828785,
+          "1": -7347716452.09953
         }
       },
       "isotropy": {
-        "mu_A": 0.5184318154282669,
-        "mu_B": 0.4885061128901818,
-        "mu": 0.21085888594530852,
+        "mu_A": 0.525472676963569,
+        "mu_B": 0.48412632312971954,
+        "mu": 0.21971383939533373,
         "defects": {
-          "A^T A": 0.9481012282885463,
-          "A^T B": 0.985745489047216,
-          "B^T B": 0.9355382783737286,
-          "B^T A": 0.9910991725022474
+          "A^T A": 0.948366354288816,
+          "A^T B": 0.9842653282958729,
+          "B^T B": 0.9363528455586896,
+          "B^T A": 0.9906271366645673
         },
         "defects_scaled": {
-          "A^T A": 0.11646304069343374,
-          "A^T B": 0.08968933870363775,
-          "B^T B": 0.08682943104321093,
-          "B^T A": 0.11396446402165693
+          "A^T A": 0.1183724511244445,
+          "A^T B": 0.0888511297935815,
+          "B^T B": 0.08665701197653436,
+          "B^T A": 0.11568008543463357
         },
         "degenerate": {
           "A^T A": false,
@@ -231,16 +243,17 @@
           "B^T B": false,
           "B^T A": false
         },
-        "max_defect": 0.9910991725022474,
-        "d_star": 74.82633596283452,
+        "max_defect": 0.9906271366645673,
+        "d_star": 74.9177015375594,
         "d_star_relative": 1.0,
         "d_star_sensitivity": {
           "1e-06": 1.0,
           "0.0001": 1.0,
           "0.001": 1.0,
           "0.01": 1.0,
-          "0.1": 0.9990588295805499
+          "0.1": 0.999081741528182
         },
+        "d_star_informative": false,
         "dim_K": 0,
         "attractive_condition_holds": true,
         "d_s_ge_2d_r": false,
@@ -249,14 +262,16 @@
       },
       "alpha": {
         "alpha": NaN,
-        "orientation": "mirror",
-        "advantaged_group": "majority",
+        "estimable": false,
+        "failure_reason": "the r-block is not separable at the 1% quantile -- only 90.02% of points are correctly classified by v, so the group r-margins gamma-tilde_g have no positive common scale and the WLOG min_g gamma-tilde_g = 1 cannot be imposed. alpha is a statement about a separable r-block and there is nothing here for it to describe",
+        "orientation": "undefined",
+        "advantaged_group": "undefined",
         "gamma_tilde_advantaged": NaN,
-        "mu_diagonal_used": 0.4885061128901818,
-        "mu": 0.21085888594530852,
-        "regime": "alpha >= 1 (geometry dominates)",
+        "mu_diagonal_used": NaN,
+        "mu": 0.21971383939533373,
+        "regime": "UNDEFINED -- alpha was not estimable; see failure_reason",
         "predicted_minority_exponent": NaN,
-        "critical_gamma": 1.229297757292433
+        "critical_gamma": NaN
       }
     }
   },
@@ -264,7 +279,11 @@
     "jaccard_r": 0.7218045112781954,
     "jaccard_s": 0.5638629283489096,
     "n_labelled_by_both": 949,
-    "concordance_on_shared": 1.0
+    "n_discordant": 0,
+    "concordance_on_shared": 1.0,
+    "discordance_upper_95": 0.003161222339304531,
+    "concordance_reliable": true,
+    "note": ""
   },
   "tau_sensitivity": [
     {
