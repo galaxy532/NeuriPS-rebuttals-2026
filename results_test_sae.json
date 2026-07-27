@@ -1,0 +1,306 @@
+{
+  "n": 5794,
+  "d": 2048,
+  "eps_empirical": 0.5,
+  "meta": {
+    "source": "waterbirds",
+    "split": "test",
+    "eps": 0.5,
+    "d": 2048,
+    "epochs": 10
+  },
+  "standardised": true,
+  "basis": "sae",
+  "tau": 0.15,
+  "rules": {
+    "two-concept": {
+      "identification": {
+        "n_r": 2060,
+        "n_s": 1491,
+        "n_weak": 4641,
+        "cell_sizes": {
+          "y=+1,place=+1": 642,
+          "y=+1,place=-1": 642,
+          "y=-1,place=+1": 2255,
+          "y=-1,place=-1": 2255
+        },
+        "min_cell": 642,
+        "se_approx": 0.015815701765959676,
+        "n_conjunction": 216,
+        "purity": 0.6
+      },
+      "coupling": {
+        "cells": [
+          {
+            "y": -1,
+            "g": 0,
+            "n": 2255,
+            "r2": -0.1643092078242352,
+            "null_mean": -3.7906189228962663,
+            "null_q95": -3.745915373194739,
+            "p": 0.004975124378109453,
+            "note": ""
+          },
+          {
+            "y": -1,
+            "g": 1,
+            "n": 2255,
+            "r2": -0.17591739778543491,
+            "null_mean": -3.7057059614001613,
+            "null_q95": -3.658075348045617,
+            "p": 0.004975124378109453,
+            "note": ""
+          },
+          {
+            "y": 1,
+            "g": 0,
+            "n": 642,
+            "r2": 0.5239419193572459,
+            "null_mean": -0.7604459503206599,
+            "null_q95": -0.7300938461343988,
+            "p": 0.004975124378109453,
+            "note": ""
+          },
+          {
+            "y": 1,
+            "g": 1,
+            "n": 642,
+            "r2": 0.49966424939236387,
+            "null_mean": -0.7375194986014477,
+            "null_q95": -0.7159602366666392,
+            "p": 0.004975124378109453,
+            "note": ""
+          }
+        ],
+        "pooled_r2": 0.5193116457993429,
+        "mean_within_cell_r2": 0.1708448907849849,
+        "n_perm": 200,
+        "min_cell_size": 642,
+        "n_cells_refused": 0,
+        "n_cells_unreliable": 0,
+        "p_value_floor": 0.004975124378109453
+      },
+      "margins": {
+        "gamma_tilde_maj": 1.000000000005871,
+        "gamma_tilde_min": 1.0,
+        "orientation": "mirror",
+        "separable_fraction": 0.989989644459786,
+        "quantile_used": 0.01,
+        "raw_min_margin": {
+          "0": 0.9999999999122609,
+          "1": 0.9999999993939875
+        }
+      },
+      "isotropy": {
+        "mu_A": 2.2112856525019398,
+        "mu_B": 2.4330398906823363,
+        "mu": 0.29003080920274604,
+        "defects": {
+          "A^T A": 0.8878703817019562,
+          "A^T B": 0.9985687128369886,
+          "B^T B": 0.9357188497181212,
+          "B^T A": 0.9951392458766519
+        },
+        "defects_scaled": {
+          "A^T A": 0.07042474775592979,
+          "A^T B": 0.09036516776106003,
+          "B^T B": 0.0847792629241488,
+          "B^T A": 0.048909301052804825
+        },
+        "degenerate": {
+          "A^T A": false,
+          "A^T B": false,
+          "B^T B": false,
+          "B^T A": false
+        },
+        "max_defect": 0.9985687128369886,
+        "d_star": 163.32096757321565,
+        "d_star_relative": 1.0,
+        "d_star_sensitivity": {
+          "1e-06": 1.0,
+          "0.0001": 1.0,
+          "0.001": 1.0,
+          "0.01": 1.0,
+          "0.1": 0.9607006549834842
+        },
+        "dim_K": 0,
+        "attractive_condition_holds": true,
+        "d_s_ge_2d_r": false,
+        "d_r": 2060,
+        "d_s": 1491
+      },
+      "alpha": {
+        "alpha": 0.37576924541762863,
+        "orientation": "mirror",
+        "advantaged_group": "majority",
+        "gamma_tilde_advantaged": 1.000000000005871,
+        "mu_diagonal_used": 2.4330398906823363,
+        "mu": 0.29003080920274604,
+        "regime": "alpha < 1 (balancing helps)",
+        "predicted_minority_exponent": 1.0,
+        "critical_gamma": 2.6612076751903273
+      }
+    },
+    "sign-flip": {
+      "identification": {
+        "n_r": 834,
+        "n_s": 518,
+        "n_weak": 6840
+      },
+      "coupling": {
+        "cells": [
+          {
+            "y": -1,
+            "g": 0,
+            "n": 2255,
+            "r2": 0.4163745037120754,
+            "null_mean": -0.8437595270264646,
+            "null_q95": -0.8313679869355913,
+            "p": 0.004975124378109453,
+            "note": ""
+          },
+          {
+            "y": -1,
+            "g": 1,
+            "n": 2255,
+            "r2": 0.43684102183454476,
+            "null_mean": -0.833818803091998,
+            "null_q95": -0.8112160663745845,
+            "p": 0.004975124378109453,
+            "note": ""
+          },
+          {
+            "y": 1,
+            "g": 0,
+            "n": 642,
+            "r2": 0.3030600997537959,
+            "null_mean": -1.729421766806313,
+            "null_q95": -1.6364653863466159,
+            "p": 0.004975124378109453,
+            "note": ""
+          },
+          {
+            "y": 1,
+            "g": 1,
+            "n": 642,
+            "r2": 0.2105972350488,
+            "null_mean": -1.7428680334698712,
+            "null_q95": -1.6838281692959145,
+            "p": 0.004975124378109453,
+            "note": ""
+          }
+        ],
+        "pooled_r2": 0.6255773784898628,
+        "mean_within_cell_r2": 0.34171821508730404,
+        "n_perm": 200,
+        "min_cell_size": 642,
+        "n_cells_refused": 0,
+        "n_cells_unreliable": 0,
+        "p_value_floor": 0.004975124378109453
+      },
+      "margins": {
+        "gamma_tilde_maj": 1.0,
+        "gamma_tilde_min": 1.000000000016347,
+        "orientation": "standard",
+        "separable_fraction": 0.989989644459786,
+        "quantile_used": 0.01,
+        "raw_min_margin": {
+          "0": 0.9999999996196295,
+          "1": 0.9999999995413801
+        }
+      },
+      "isotropy": {
+        "mu_A": 0.6162317558320567,
+        "mu_B": 0.9370465500323127,
+        "mu": 0.25038176780612403,
+        "defects": {
+          "A^T A": 0.889242512789848,
+          "A^T B": 0.9962519028271304,
+          "B^T B": 0.9499573845352779,
+          "B^T A": 0.9810125749970379
+        },
+        "defects_scaled": {
+          "A^T A": 0.0579282478499311,
+          "A^T B": 0.10755989458585921,
+          "B^T B": 0.07872240676776643,
+          "B^T A": 0.04723807800180317
+        },
+        "degenerate": {
+          "A^T A": false,
+          "A^T B": false,
+          "B^T B": false,
+          "B^T A": false
+        },
+        "max_defect": 0.9962519028271304,
+        "d_star": 89.53490780712664,
+        "d_star_relative": 1.0,
+        "d_star_sensitivity": {
+          "1e-06": 1.0,
+          "0.0001": 1.0,
+          "0.001": 1.0,
+          "0.01": 1.0,
+          "0.1": 0.9463138695084107
+        },
+        "dim_K": 0,
+        "attractive_condition_holds": true,
+        "d_s_ge_2d_r": false,
+        "d_r": 834,
+        "d_s": 518
+      },
+      "alpha": {
+        "alpha": 0.7736401436951419,
+        "orientation": "standard",
+        "advantaged_group": "minority",
+        "gamma_tilde_advantaged": 1.000000000016347,
+        "mu_diagonal_used": 0.6162317558320567,
+        "mu": 0.25038176780612403,
+        "regime": "alpha < 1 (balancing helps)",
+        "predicted_minority_exponent": 1.0,
+        "critical_gamma": 1.2925906290747027
+      }
+    }
+  },
+  "sae": {
+    "var_explained": 0.9881277178187002,
+    "avg_active": 3806.03173828125,
+    "d_hidden": 8192
+  },
+  "rule_agreement": {
+    "jaccard_r": 0.4041727316836487,
+    "jaccard_s": 0.3474178403755869,
+    "n_labelled_by_both": 1351,
+    "concordance_on_shared": 1.0
+  },
+  "tau_sensitivity": [
+    {
+      "tau": 0.05,
+      "n_r": 2850,
+      "n_s": 2067
+    },
+    {
+      "tau": 0.1,
+      "n_r": 1583,
+      "n_s": 1078
+    },
+    {
+      "tau": 0.15,
+      "n_r": 834,
+      "n_s": 518
+    },
+    {
+      "tau": 0.2,
+      "n_r": 446,
+      "n_s": 218
+    },
+    {
+      "tau": 0.3,
+      "n_r": 168,
+      "n_s": 21
+    },
+    {
+      "tau": 0.4,
+      "n_r": 74,
+      "n_s": 4
+    }
+  ]
+}

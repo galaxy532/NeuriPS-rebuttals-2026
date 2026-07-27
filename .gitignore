@@ -10,10 +10,6 @@ celeba*/
 
 # Cached features and results (regenerable)
 *.npz
-results*.json
-results*.md
-eps_sweep*.json
-eps_sweep*.md
 
 # Python
 __pycache__/
