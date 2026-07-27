@@ -152,6 +152,28 @@ def two_concept_identify(
     which is neither cleanly causal nor cleanly spurious and which the sign-flip
     rule would silently misfile.
 
+    What beta_int actually is, in Waterbirds
+    ----------------------------------------
+    Worth stating explicitly, because it makes the diagnostic much easier to
+    read. The groups are defined by g = 1[place != y], so with y and place both
+    recoded to +/-1,
+
+        y * place = +1  <=>  place agrees with y  <=>  g = 0,
+        y * place = -1  <=>                           g = 1,
+
+    i.e. the interaction regressor IS the group indicator, up to the affine map
+    y*place = 1 - 2g. Substituting the cell means gives
+
+        beta_int = 1/2 * [ (mean over the two g=0 cells)
+                          - (mean over the two g=1 cells) ],
+
+    the unweighted majority-minus-minority contrast. So a conjunction-dominated
+    feature is one that responds to GROUP MEMBERSHIP more strongly than to bird
+    type or to background separately -- a feature that is neither r nor s, and
+    therefore one the manuscript's Phi = (r, s) partition has no slot for. That
+    is why the count matters: it is the only quantity here that speaks to
+    whether the two-block decomposition fits the representation at all.
+
     A caution the caller should propagate: y and place are strongly correlated
     on the train split (corr = 0.867), so beta_y and beta_p are identifiable but
     noisy -- variance inflation factor ~4 relative to a balanced design. The
@@ -197,6 +219,23 @@ def two_concept_identify(
     idx_r = np.flatnonzero(strong & (purity_r >= purity))
     idx_s = np.flatnonzero(strong & (purity_r <= 1.0 - purity))
 
+    # -- conjunction features, counted only where the count means something ---
+    #
+    # The test is "|beta_int| is the largest of the three contrasts", with no
+    # threshold of its own. Applied to EVERY column it is therefore dominated by
+    # features whose three coefficients are all at the noise floor, where which
+    # one comes out largest is a coin toss: under exchangeable contrasts
+    # beta_int wins 1/3 of the time. Reported over all 8192 SAE units that gave
+    # 2066 (25%) -- a number that looks alarming and is in fact BELOW the chance
+    # rate, because 8145 of those units were too weak to classify at all.
+    #
+    # Restricting to the features that pass tau counts only columns that respond
+    # to something, which is the population the diagnostic is about. The count
+    # is returned with its denominator, since 2066 means nothing without one.
+    conj = np.abs(beta_int) > np.maximum(np.abs(beta_y), np.abs(beta_p))
+    n_strong = int(strong.sum())
+    n_conj_strong = int((conj & strong).sum())
+
     return {
         "idx_r": idx_r,
         "idx_s": idx_s,
@@ -211,7 +250,29 @@ def two_concept_identify(
         "n_r": int(idx_r.size),
         "n_s": int(idx_s.size),
         "n_weak": int(phi.shape[1] - idx_r.size - idx_s.size),
-        "n_conjunction": int((np.abs(beta_int) > np.maximum(np.abs(beta_y), np.abs(beta_p))).sum()),
+        # Among features passing tau -- the meaningful version.
+        "n_conjunction": n_conj_strong,
+        "n_strong": n_strong,
+        "frac_conjunction": (n_conj_strong / n_strong) if n_strong else float("nan"),
+        # Over every column, including the ones too weak to classify. Kept only
+        # so the contrast with the restricted count is visible; it is the number
+        # that used to be reported alone.
+        "n_conjunction_all": int(conj.sum()),
+        "frac_conjunction_all": float(conj.mean()),
+        # Under three exchangeable contrasts, |beta_int| is largest 1/3 of the
+        # time. This is the correct null for `frac_conjunction_all` ONLY, and a
+        # fraction at or below it is consistent with pure noise.
+        #
+        # It is NOT the null for the restricted `frac_conjunction`. Passing tau
+        # means sqrt(beta_y^2 + beta_p^2) is large, so the restricted set is
+        # explicitly selected on beta_y and beta_p being big -- which makes
+        # beta_int less likely to be the maximum among exactly those features.
+        # On pure-noise input the restricted rate comes out near 0.11 rather
+        # than 0.33, and the exact value depends on tau and on the strength
+        # distribution. So the restricted count must not be compared against
+        # 1/3; its reference has to be estimated (a permutation over the cell
+        # assignment would do it) rather than assumed.
+        "conjunction_chance_rate_all": 1.0 / 3.0,
         "tau": tau,
         "purity": purity,
     }
@@ -223,6 +284,21 @@ def agreement(res_two: dict, res_flip: dict, d: int) -> dict:
     The sign-flip rule and the two-concept regression are independent routes to
     the same split, so their agreement is evidence that neither is an artefact.
     Reported as the overlap of the two r-sets and the two s-sets.
+
+    Why the concordance carries an error bar
+    ----------------------------------------
+    `concordance_on_shared` is a proportion, and a proportion of 1.000 is only
+    as strong as the sample it was measured on. With zero discordant features
+    out of n, the rule of three puts a 95% upper bound of 3/n on the true
+    discordance rate:
+
+        n = 949  (raw basis)  ->  discordance could still be up to  0.3%
+        n =  18  (SAE basis)  ->  discordance could still be up to 16.7%
+
+    Both print as "concordance = 1.000", and they are not remotely the same
+    claim. `concordance_reliable` is False below n = 60, the point at which the
+    bound falls under 5%, so a small-sample 1.000 can never be quoted as though
+    it were the large-sample one.
     """
     r2, s2 = set(res_two["idx_r"].tolist()), set(res_two["idx_s"].tolist())
     rf, sf = set(res_flip["idx_r"].tolist()), set(res_flip["idx_s"].tolist())
@@ -233,11 +309,35 @@ def agreement(res_two: dict, res_flip: dict, d: int) -> dict:
     labelled = (r2 | s2) & (rf | sf)
     concord = sum(1 for k in labelled
                   if (k in r2) == (k in rf) and (k in s2) == (k in sf))
+
+    n_shared = len(labelled)
+    n_discordant = n_shared - concord
+    # The rule-of-three bound is only valid when nothing discordant was seen;
+    # with n_discordant > 0 the point estimate itself carries the information.
+    disc_upper_95 = (3.0 / n_shared) if (n_shared > 0 and n_discordant == 0) \
+        else float("nan")
+    reliable = bool(n_shared >= 60)
+
+    note = ""
+    if n_shared == 0:
+        note = ("the two rules label no feature in common, so concordance is "
+                "undefined and the cross-check argument is unavailable")
+    elif not reliable:
+        note = (f"only {n_shared} features are labelled by both rules; the "
+                "concordance is a small-sample proportion"
+                + (f" whose 95% upper bound on discordance is still "
+                   f"{disc_upper_95:.1%}" if n_discordant == 0 else "")
+                + ". Do not quote it as agreement between the rules.")
+
     return {
         "jaccard_r": jac(r2, rf),
         "jaccard_s": jac(s2, sf),
-        "n_labelled_by_both": len(labelled),
-        "concordance_on_shared": concord / len(labelled) if labelled else float("nan"),
+        "n_labelled_by_both": n_shared,
+        "n_discordant": n_discordant,
+        "concordance_on_shared": concord / n_shared if n_shared else float("nan"),
+        "discordance_upper_95": disc_upper_95,
+        "concordance_reliable": reliable,
+        "note": note,
     }
 
 

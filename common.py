@@ -145,9 +145,27 @@ class MarginFit:
     v_hat: np.ndarray        # unit norm, used for the eigenvalue conditions
     gam_tilde: dict          # {0: gamma-tilde_maj, 1: gamma-tilde_min}, min == 1
     gam_tilde_raw: dict      # before the min_g -> 1 renormalisation
-    separable_frac: float    # fraction of points with y v.r >= 1 (soft-margin diag.)
     quantile: float          # lower quantile used in place of the ess-inf
-    orientation: str         # "standard" (gam_min >= gam_maj) or "mirror"
+    orientation: str         # "standard", "mirror", or "undefined" (see below)
+
+    # -- separability, reported as two fields that cannot be confused ---------
+    #
+    # An earlier version reported a single `separable_frac`, and it silently
+    # meant two different things. When the r-block IS separable at the working
+    # quantile it equalled `mean(margins_scaled >= 1)`, which is identically
+    # 1 - quantile (0.99 at the default) because the scaling is DEFINED by that
+    # quantile -- a constant dressed as a measurement. When the block is NOT
+    # separable, the 1e-9 clamp below turns the same expression into the plain
+    # fraction of correctly classified points. One name, two quantities, and no
+    # way for a reader to tell which one they were looking at.
+    #
+    # The two are now separate and each means one thing always:
+    separable_at_quantile: bool   # is the `quantile`-level margin strictly > 0?
+    frac_correct: float           # mean(y v.r > 0); a plain training accuracy,
+                                  # meaningful whether or not the block separates
+    separable_frac: float         # kept for continuity; equals 1 - quantile when
+                                  # separable_at_quantile is True. Prefer the two
+                                  # fields above.
 
 
 def fit_margin_direction(
@@ -206,16 +224,26 @@ def fit_margin_direction(
     v = svm.coef_.ravel().astype(np.float64)
 
     margins = y * (phi_r @ v)
+    # Computed BEFORE any rescaling, so it is a property of the fitted direction
+    # rather than of the normalisation applied to it.
+    frac_correct = float(np.mean(margins > 0))
+
     # Rescale so that the working margin level is exactly 1 (Def. r-separability).
     level = np.quantile(margins, quantile)
-    if level <= 0:
+    separable_at_quantile = bool(level > 0)
+    if not separable_at_quantile:
         warnings.warn(
             "The r-block is not separable at the requested quantile "
-            f"(quantile-{quantile} margin = {level:.4g} <= 0). alpha is only "
-            "meaningful under r-separability; treat downstream numbers as "
+            f"(quantile-{quantile} margin = {level:.4g} <= 0; only "
+            f"{frac_correct:.2%} of points are correctly classified). alpha is "
+            "only meaningful under r-separability; treat downstream numbers as "
             "diagnostic, not as a verification of the theory.",
             RuntimeWarning,
         )
+        # The clamp keeps the arithmetic finite, but note what it does: dividing
+        # by 1e-9 inflates every margin by 10^9, which is why `gam_tilde_raw`
+        # reads in the billions on non-separable data. Those magnitudes are an
+        # artefact of this clamp and carry no information.
         level = max(level, 1e-9)
     v_svm = v / level
     margins_scaled = y * (phi_r @ v_svm)
@@ -227,21 +255,31 @@ def fit_margin_direction(
 
     base = min(raw[0], raw[1])
     if not np.isfinite(base) or base <= 0:
+        # No positive common scale exists, so the WLOG min_g gamma-tilde_g = 1
+        # cannot be imposed and the group r-margins are undefined.
         gam = {0: float("nan"), 1: float("nan")}
+        # Orientation must be reported as undefined rather than computed. With
+        # gam = nan the comparison `gam[1] >= gam[0]` is False (every ordering
+        # test against nan is), so the old code fell through to "mirror" and
+        # printed a definite orientation that was purely a nan artefact -- and
+        # "mirror" then selected mu_B over mu_A downstream.
+        orientation = "undefined"
     else:
         gam = {gg: raw[gg] / base for gg in (0, 1)}
         v_svm = v_svm / base
+        orientation = "standard" if gam[1] >= gam[0] else "mirror"
 
-    orientation = "standard" if gam[1] >= gam[0] else "mirror"
     nrm = np.linalg.norm(v_svm)
     return MarginFit(
         v_svm=v_svm,
         v_hat=v_svm / (nrm if nrm > 0 else 1.0),
         gam_tilde=gam,
         gam_tilde_raw={gg: float(np.min(margins_scaled[g == gg])) for gg in (0, 1)},
-        separable_frac=float(np.mean(margins_scaled >= 1.0)),
         quantile=quantile,
         orientation=orientation,
+        separable_at_quantile=separable_at_quantile,
+        frac_correct=frac_correct,
+        separable_frac=float(np.mean(margins_scaled >= 1.0)),
     )
 
 
@@ -302,6 +340,8 @@ class IsoDiagnostics:
     dim_K: int               # dim of the kernel subspace K in the reparametrisation
     attractive: bool         # whether -1 <= mu < min(mu_A, mu_B) holds
     rank_rtol: float
+    d_star_informative: bool # False when dim K == 0 pins d_star_relative at 1;
+                             # see the note in iso_diagnostics' docstring
 
 
 def _kperp_residual(A, B, v, rtol):
@@ -366,6 +406,33 @@ def iso_diagnostics(
     the radius sup ||r|| of the support. d* == 0 exactly when (A, B) is already
     isotropic, so d* quantifies the size of the perturbation the reparametrisation
     argument has to absorb into the noise.
+
+    WHEN d* IS VACUOUS, AND WHY IT MUST BE FLAGGED
+    ----------------------------------------------
+    d* is only a measurement when the subspace K is non-trivial, and on
+    ESTIMATED operators it very often cannot be. `_kperp_residual` builds
+
+        M_stack = [Pi_perp A^T ; Pi_perp B^T]   of shape (2 d_r, d_s),
+
+    and K is its null space, so
+
+        dim K = d_s - rank(M_stack),    rank(M_stack) <= min(2 d_r, d_s).
+
+    If d_s <= 2 d_r, the rank bound is d_s, and ridge-estimated A and B are
+    full rank for any positive ridge penalty -- the estimate has no exact
+    linear dependencies even when the population operators do. The rank then
+    saturates at d_s, giving dim K = 0, K_basis empty, Pi_{K^perp} = I, and
+    hence
+
+        resid = ||A v|| + ||B v|| = scale   =>   d_star_relative == 1 EXACTLY.
+
+    So on any run with d_s <= 2 d_r, d_star_relative is 1.0000 as a matter of
+    arithmetic, whatever the operators look like. It is then reporting the
+    `d_s >= 2 d_r` flag in disguise, not a distance to an isotropic
+    reparametrisation, and the `rank_rtol` sweep cannot rescue it because the
+    deficiency is in the SHAPE of M_stack rather than in where its singular
+    values are cut. `d_star_informative` records this so a reader is never
+    invited to interpret the pinned value.
     """
     v = v_hat / np.linalg.norm(v_hat)
     Av, Bv = A @ v, B @ v
@@ -414,6 +481,7 @@ def iso_diagnostics(
         dim_K=dim_K,
         attractive=bool(-1.0 <= mu < min(mu_A, mu_B)),
         rank_rtol=rank_rtol,
+        d_star_informative=bool(dim_K > 0),
     )
 
 
@@ -437,22 +505,65 @@ def compute_alpha(mf: MarginFit, iso: IsoDiagnostics) -> dict:
     if mf.orientation == "standard":
         gam_adv, mu_diag = mf.gam_tilde[1], iso.mu_A
         advantaged = "minority"
-    else:
+    elif mf.orientation == "mirror":
         gam_adv, mu_diag = mf.gam_tilde[0], iso.mu_B
         advantaged = "majority"
+    else:  # "undefined": the margin fit failed, so there is no advantaged group
+        gam_adv, mu_diag = float("nan"), float("nan")
+        advantaged = "undefined"
 
     denom = 1.0 + mu_diag
     alpha = float(gam_adv * (1.0 + iso.mu) / denom) if denom != 0 else float("nan")
+
+    # A non-finite alpha must be reported as a failure, never as a regime.
+    #
+    # The comparison `alpha < 1` evaluates to False when alpha is nan, because
+    # every ordering comparison against nan is False. A bare
+    #
+    #     "alpha < 1 (...)" if alpha < 1 else "alpha >= 1 (...)"
+    #
+    # therefore routed EVERY failed estimate into the "alpha >= 1 (geometry
+    # dominates)" branch -- turning a missing number into a definite claim about
+    # the manuscript's central dichotomy, printed in bold next to a nan. The
+    # finiteness of alpha is checked first so that the two-way regime split is
+    # only ever reached by an alpha that actually exists.
+    estimable = bool(np.isfinite(alpha))
+    if estimable:
+        regime = ("alpha < 1 (balancing helps)" if alpha < 1
+                  else "alpha >= 1 (geometry dominates)")
+        failure_reason = ""
+        predicted = float(max(alpha, 1.0))
+    else:
+        regime = "UNDEFINED -- alpha was not estimable; see failure_reason"
+        predicted = float("nan")
+        if not mf.separable_at_quantile:
+            failure_reason = (
+                "the r-block is not separable at the "
+                f"{mf.quantile:.0%} quantile -- only {mf.frac_correct:.2%} of "
+                "points are correctly classified by v, so the group r-margins "
+                "gamma-tilde_g have no positive common scale and the WLOG "
+                "min_g gamma-tilde_g = 1 cannot be imposed. alpha is a "
+                "statement about a separable r-block and there is nothing here "
+                "for it to describe"
+            )
+        elif not np.isfinite(iso.mu) or not np.isfinite(mu_diag):
+            failure_reason = ("the alignment eigenvalues are not finite, so the "
+                              "isotropic-regime quantities feeding alpha do not exist")
+        else:
+            failure_reason = ("1 + mu_diagonal == 0, so alpha's denominator "
+                              "vanishes")
+
     return {
         "alpha": alpha,
+        "estimable": estimable,
+        "failure_reason": failure_reason,
         "orientation": mf.orientation,
         "advantaged_group": advantaged,
         "gamma_tilde_advantaged": float(gam_adv),
         "mu_diagonal_used": float(mu_diag),
         "mu": float(iso.mu),
-        "regime": "alpha < 1 (balancing helps)" if alpha < 1
-                  else "alpha >= 1 (geometry dominates)",
-        "predicted_minority_exponent": float(max(alpha, 1.0)),
+        "regime": regime,
+        "predicted_minority_exponent": predicted,
         "critical_gamma": float(denom / (1.0 + iso.mu))
                           if (1.0 + iso.mu) != 0 else float("nan"),
     }

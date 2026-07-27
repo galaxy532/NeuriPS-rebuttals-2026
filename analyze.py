@@ -1,16 +1,61 @@
 """
 analyze.py -- Main driver: from a frozen-feature bundle to rebuttal-ready numbers.
 
-Run from the repository root, after extract_features.py. CPU only, cheap.
+Run from the repository root, after extract_features.py. CPU only, except that
+`--sae` fits a small autoencoder and will use a GPU if one is visible.
 
-    python analyze.py           # raw Phi coordinates   -> results_test_raw.{json,md}
-    python analyze.py --sae     # SAE activations       -> results_test_sae.{json,md}
+THE COMMANDS
+============
 
-That is the whole interface. The first command produces the numbers that go in
-the rebuttal; the second is worth running only if the first reports most
-features as "weak", which is the symptom of polysemantic raw coordinates
-(several concepts sharing one coordinate through superposition). `--sae` needs
-torch.
+    # 1. the default run: raw Phi coordinates
+    python analyze.py
+    #    -> results_test_raw.{json,md}
+
+    # 2. the SAE basis, with the settings that actually sparsify the dictionary
+    python analyze.py --sae --sae-l1 0.3 --sae-epochs 400
+    #    -> results_test_sae_l1-0.3_ep-400.{json,md}
+
+    # 3. the SAE basis at a lower classification threshold. Needed because a
+    #    sparse dictionary has rarely-firing units whose 2x2 contrasts are
+    #    small in pooled-SD units, so the default tau = 0.15 classifies almost
+    #    nothing: the run above labels 47 of 8192 units and leaves 8145 "weak".
+    #    tau = 0.05 is still ~3 standard errors (se_approx ~ 0.0158).
+    python analyze.py --sae --sae-l1 0.3 --sae-epochs 400 --tau 0.05
+    #    -> results_test_sae_l1-0.3_ep-400_tau-0.05.{json,md}
+
+Nothing else needs to be typed: output names are derived (see below), so these
+three commands never overwrite one another.
+
+WHICH KNOB TO REACH FOR
+=======================
+`--sae-l1` and `--sae-epochs` control the DICTIONARY; `--tau` controls what is
+CLASSIFIED once the dictionary exists. They fail in ways that look similar and
+are not:
+
+  avg_active near d_hidden/2  -> the L1 penalty has not moved the dictionary off
+                                 its random initialisation. Raise --sae-epochs
+                                 first (the default 60 is only ~720 optimiser
+                                 steps at batch=512), then --sae-l1.
+  avg_active low but n_weak    -> the dictionary is sparse and the THRESHOLD is
+  near d_hidden                  now binding. Lower --tau. Raising --sae-l1
+                                 further makes this worse, not better.
+
+Raising --tau never fixes polysemanticity: tau gates `strength`, and a unit
+responding to two concepts has HIGH strength with purity near 0.5, so a higher
+threshold preferentially retains exactly the units it was meant to exclude.
+Selectivity is the `--purity` gate's job, and it can only succeed on a
+dictionary that contains selective units.
+
+READING THE OUTPUT: THREE FAILURES THAT ARE REPORTED, NOT HIDDEN
+================================================================
+  "alpha: NOT ESTIMABLE"   The r-block is not separable at the working quantile,
+                           so gamma-tilde_g does not exist. No regime is claimed.
+                           A nan is never printed as "geometry dominates".
+  "d* is VACUOUS"          dim K = 0, which d_s <= 2 d_r forces arithmetically.
+                           The 1.0000 is an identity, not a measurement.
+  "r-block is NOT          Only `frac_correct` of points are correctly
+   separable"              classified. Separability and accuracy are now two
+                           separate fields; they used to share one name.
 
 The single switch chooses the BASIS -- which columns count as "features".
 Both identification RULES are always run, on whichever basis was chosen:
@@ -148,6 +193,8 @@ def _downstream(source, y, g, ident, n_perm, quantile, seed, min_cell) -> dict:
         "gamma_tilde_maj": mf.gam_tilde[0],
         "gamma_tilde_min": mf.gam_tilde[1],
         "orientation": mf.orientation,
+        "separable_at_quantile": mf.separable_at_quantile,
+        "frac_correct": mf.frac_correct,
         "separable_fraction": mf.separable_frac,
         "quantile_used": mf.quantile,
         "raw_min_margin": mf.gam_tilde_raw,
@@ -158,6 +205,7 @@ def _downstream(source, y, g, ident, n_perm, quantile, seed, min_cell) -> dict:
         "degenerate": iso.degenerate, "max_defect": iso.max_defect,
         "d_star": iso.d_star, "d_star_relative": iso.d_star_relative,
         "d_star_sensitivity": iso.d_star_sensitivity,
+        "d_star_informative": iso.d_star_informative,
         "dim_K": iso.dim_K, "attractive_condition_holds": iso.attractive,
         "d_s_ge_2d_r": bool(phi_s.shape[1] >= 2 * phi_r.shape[1]),
         "d_r": int(phi_r.shape[1]), "d_s": int(phi_s.shape[1]),
@@ -250,6 +298,11 @@ def run(bundle: FeatureBundle, tau: float = DEFAULTS["tau"],
                 "min_cell": ident["min_cell"],
                 "se_approx": ident["se_approx"],
                 "n_conjunction": ident["n_conjunction"],
+                "n_strong": ident["n_strong"],
+                "frac_conjunction": ident["frac_conjunction"],
+                "n_conjunction_all": ident["n_conjunction_all"],
+                "frac_conjunction_all": ident["frac_conjunction_all"],
+                "conjunction_chance_rate_all": ident["conjunction_chance_rate_all"],
                 "purity": purity,
             })
         block.update(_downstream(source, y, g, ident, n_perm, quantile,
@@ -266,8 +319,29 @@ def _rule_markdown(name: str, blk: dict) -> list[str]:
     if "cell_sizes" in idn:
         sizes = ", ".join(f"{k}: {v}" for k, v in idn["cell_sizes"].items())
         L.append(f"- (y, place) cell sizes: {sizes}  (smallest {idn['min_cell']})")
-        L.append(f"- approx. SE of each contrast: {idn['se_approx']:.4f}; "
-                 f"conjunction-dominated features: {idn['n_conjunction']}")
+        L.append(f"- approx. SE of each contrast: {idn['se_approx']:.4f}")
+        chance = idn.get("conjunction_chance_rate_all", 1.0 / 3.0)
+        frac = idn.get("frac_conjunction", float("nan"))
+        frac_all = idn.get("frac_conjunction_all", float("nan"))
+        L.append("- conjunction-dominated features (|beta_int| the largest of "
+                 "the three contrasts). Since y*place = 1 - 2g in Waterbirds, "
+                 "beta_int is the group contrast, so these respond to GROUP "
+                 "membership more strongly than to bird type or background -- "
+                 "features the Phi = (r, s) partition has no slot for.")
+        L.append(f"  - among the {idn.get('n_strong', 0)} features passing tau: "
+                 f"**{idn['n_conjunction']}** ({frac:.1%})")
+        L.append(f"  - over all columns, including those too weak to classify: "
+                 f"{idn.get('n_conjunction_all', 0)} ({frac_all:.1%}), against a "
+                 f"chance rate of {chance:.1%} under exchangeable contrasts")
+        if np.isfinite(frac_all) and frac_all <= chance:
+            L.append("  - the unrestricted rate is at or below chance, i.e. "
+                     "consistent with noise, and is NOT evidence that the "
+                     "(r, s) partition is violated")
+        L.append("  - the two rates are not comparable to each other: passing "
+                 "tau selects on beta_y and beta_p being large, which depresses "
+                 "the restricted rate well below 1/3 even on pure noise (~0.11 "
+                 "in testing). Only the unrestricted rate has 1/3 as its null; "
+                 "the restricted one needs an estimated reference.")
     if "error" in blk:
         L.append(f"\n**Aborted:** {blk['error']}\n")
         return L
@@ -316,16 +390,38 @@ def _rule_markdown(name: str, blk: dict) -> list[str]:
     L.append(f"- d* = {iso['d_star']:.4f} (relative {iso['d_star_relative']:.4f}); "
              f"sensitivity to the rank cutoff: "
              + ", ".join(f"{k}: {v:.3f}" for k, v in iso["d_star_sensitivity"].items()))
+    if not iso.get("d_star_informative", True):
+        L.append("- **d\\* is VACUOUS on this run.** dim K = 0, which is forced "
+                 "whenever d_s <= 2 d_r and the estimated operators are full "
+                 "rank: M_stack is (2 d_r, d_s), so its rank saturates at d_s, "
+                 "K = {0}, Pi_{K^perp} = I, and d*_relative = 1.0000 exactly as "
+                 "arithmetic. It is restating the `d_s >= 2 d_r` flag, not "
+                 "measuring a distance, and the rank-cutoff sweep above cannot "
+                 "change that. Do not quote it.")
 
     L.append("\n**Margins and the exponent alpha**\n")
     L.append(f"- gamma-tilde_maj = {m['gamma_tilde_maj']:.4f}, "
              f"gamma-tilde_min = {m['gamma_tilde_min']:.4f} "
              f"(orientation: {m['orientation']}, "
              f"ess-inf proxy: {m['quantile_used']:.0%} quantile)")
-    L.append(f"- r-block separable fraction = {m['separable_fraction']:.4f}")
-    L.append(f"- **alpha = {a['alpha']:.4f}** -> {a['regime']}; "
-             f"predicted minority exponent max(alpha,1) = "
-             f"{a['predicted_minority_exponent']:.4f}")
+    if m.get("separable_at_quantile", True):
+        L.append(f"- r-block IS separable at the {m['quantile_used']:.0%} "
+                 f"quantile; fraction correctly classified = "
+                 f"{m['frac_correct']:.4f}")
+    else:
+        L.append(f"- **r-block is NOT separable at the {m['quantile_used']:.0%} "
+                 f"quantile.** Only {m['frac_correct']:.2%} of points are "
+                 "correctly classified by v, so gamma-tilde_g above are nan and "
+                 "the orientation is undefined rather than 'mirror'. The "
+                 "billions in `raw_min_margin` are an artefact of the 1e-9 "
+                 "clamp, not measurements.")
+    if a.get("estimable", True):
+        L.append(f"- **alpha = {a['alpha']:.4f}** -> {a['regime']}; "
+                 f"predicted minority exponent max(alpha,1) = "
+                 f"{a['predicted_minority_exponent']:.4f}")
+    else:
+        L.append(f"- **alpha: NOT ESTIMABLE.** {a['failure_reason']}. No regime "
+                 "is claimed for this rule.")
     return L
 
 
@@ -346,7 +442,14 @@ def to_markdown(res: dict) -> str:
         L.append(f"- agreement between the two rules: Jaccard r = "
                  f"{ag['jaccard_r']:.3f}, s = {ag['jaccard_s']:.3f}; "
                  f"concordance on the {ag['n_labelled_by_both']} features both "
-                 f"label = {ag['concordance_on_shared']:.3f}")
+                 f"label = {ag['concordance_on_shared']:.3f} "
+                 f"({ag.get('n_discordant', 0)} discordant)")
+        if ag.get("note"):
+            L.append(f"  - **Caution:** {ag['note']}")
+        elif np.isfinite(ag.get("discordance_upper_95", float("nan"))):
+            L.append(f"  - zero discordant features, so by the rule of three the "
+                     f"95% upper bound on the true discordance rate is "
+                     f"{ag['discordance_upper_95']:.1%}")
 
     if res.get("tau_sensitivity"):
         L.append("\n**Threshold sensitivity (sign-flip rule)**\n")
