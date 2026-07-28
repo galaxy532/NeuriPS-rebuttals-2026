@@ -307,6 +307,84 @@ def fit_margin_direction(
     )
 
 
+def refit_margins_at_quantile(
+    mf: MarginFit,
+    phi_r: np.ndarray,
+    y: np.ndarray,
+    g: np.ndarray,
+    quantile: float,
+) -> MarginFit:
+    """Recompute the group r-margins at a different ess-inf quantile.
+
+    WHY THIS EXISTS
+    ---------------
+    The manuscript defines gamma-tilde_g as an essential infimum, i.e. it asks
+    for  P(y v.r >= 1) = 1  exactly. The separability probe shows the best
+    achievable held-out accuracy on this representation is about 0.94, so a
+    proxy quantile of 1% -- which demands 99% of points on the correct side --
+    can never be met in the population, and alpha is then refused for a reason
+    that has nothing to do with the geometry it is meant to describe.
+
+    Sweeping the quantile turns that binary failure into a reported sensitivity:
+    at which q does the r-block become separable, and how does alpha move with
+    q once it is? A q chosen above the population error rate gives a q-RELAXED
+    r-separability under which alpha is estimable, with the approximation
+    stated rather than hidden.
+
+    WHY NO REFIT IS NEEDED
+    ----------------------
+    `fit_margin_direction` divides v twice, first by `level` and then by `base`,
+    and both are positive scalars whenever the block separates. A positive
+    rescaling does not move a direction, so `v_hat` is INDEPENDENT of the
+    quantile. Moreover gamma-tilde is a RATIO of two per-group quantiles of the
+    same margin vector, so the `level` division cancels out of it entirely.
+    Everything that changes with q can therefore be recomputed from the margins
+    of the existing direction, and the SVM -- the expensive part, minutes at
+    d_r in the thousands -- is fitted once for the whole sweep.
+
+    By the same argument `iso_diagnostics` is q-independent: it consumes only
+    `v_hat`. So mu_A', mu', dim K and d* are shared across the sweep, and only
+    gamma-tilde moves.
+
+    Returns a MarginFit carrying the same direction with gamma-tilde,
+    separability and orientation recomputed at `quantile`.
+    """
+    v = mf.v_hat
+    margins = y * (phi_r @ v)
+    frac_correct = float(np.mean(margins > 0))
+
+    level = float(np.quantile(margins, quantile))
+    separable = bool(level > 0)
+
+    raw = {}
+    for gg in (0, 1):
+        m = margins[g == gg]
+        raw[gg] = float(np.quantile(m, quantile)) if m.size else float("nan")
+
+    base = min(raw[0], raw[1])
+    if not np.isfinite(base) or base <= 0:
+        gam = {0: float("nan"), 1: float("nan")}
+        orientation = "undefined"
+    else:
+        # The `level` scaling cancels from the ratio, so dividing the raw
+        # per-group quantiles by their minimum reproduces exactly the
+        # gamma-tilde that fit_margin_direction would return at this quantile.
+        gam = {gg: raw[gg] / base for gg in (0, 1)}
+        orientation = "standard" if gam[1] >= gam[0] else "mirror"
+
+    return MarginFit(
+        v_svm=mf.v_svm,
+        v_hat=v,
+        gam_tilde=gam,
+        gam_tilde_raw={gg: float(np.min(margins[g == gg])) for gg in (0, 1)},
+        quantile=quantile,
+        orientation=orientation,
+        separable_at_quantile=separable,
+        frac_correct=frac_correct,
+        separable_frac=float(np.mean(margins >= level)) if separable else frac_correct,
+    )
+
+
 # --------------------------------------------------------------------------
 # Step 2 -- the alignment operators A and B
 # --------------------------------------------------------------------------

@@ -153,8 +153,16 @@ import numpy as np
 
 from common import (
     FeatureBundle, compute_alpha, fit_margin_direction, fit_operators,
-    iso_diagnostics, standardize, within_cell_coupling,
+    iso_diagnostics, refit_margins_at_quantile, standardize,
+    within_cell_coupling,
 )
+
+# Quantiles swept as the ess-inf proxy. The separability probe puts the
+# population error rate of the best linear rule near 5-6%, so the grid must
+# straddle that: everything at or below 0.05 is expected to fail on real data,
+# and the interesting question is where it starts succeeding and what alpha
+# does there.
+Q_GRID = (0.005, 0.01, 0.02, 0.05, 0.08, 0.10, 0.15)
 from identify_rs import (
     agreement, sign_flip_identify, tau_sensitivity, two_concept_identify,
 )
@@ -237,6 +245,39 @@ def _downstream(source, y, g, ident, n_perm, quantile, seed, min_cell) -> dict:
         "d_r": int(phi_r.shape[1]), "d_s": int(phi_s.shape[1]),
     }
     out["alpha"] = compute_alpha(mf, iso)
+
+    # -- alpha as a function of the ess-inf proxy quantile --------------------
+    # `iso` is reused unchanged across the sweep: it depends on the operators
+    # and on v_hat, and v_hat does not move with q (see
+    # refit_margins_at_quantile). Only gamma-tilde changes, so this costs one
+    # quantile per rung rather than one SVM.
+    sweep = []
+    for q in Q_GRID:
+        mf_q = refit_margins_at_quantile(mf, phi_r, y, g, q)
+        a_q = compute_alpha(mf_q, iso)
+        sweep.append({
+            "q": float(q),
+            "separable": bool(mf_q.separable_at_quantile),
+            "gamma_tilde_maj": float(mf_q.gam_tilde[0]),
+            "gamma_tilde_min": float(mf_q.gam_tilde[1]),
+            "orientation": mf_q.orientation,
+            "alpha": float(a_q["alpha"]),
+            "estimable": bool(a_q["estimable"]),
+            "regime": a_q["regime"] if a_q["estimable"] else "",
+        })
+    out["alpha_q_sweep"] = sweep
+    est = [r for r in sweep if r["estimable"]]
+    out["q_summary"] = {
+        "smallest_separating_q": next((r["q"] for r in sweep if r["separable"]),
+                                      None),
+        "smallest_estimable_q": est[0]["q"] if est else None,
+        "alpha_range_over_estimable_q": (
+            [min(r["alpha"] for r in est), max(r["alpha"] for r in est)]
+            if est else None),
+        "alpha_crosses_one": (
+            bool(est and min(r["alpha"] for r in est) < 1.0
+                 <= max(r["alpha"] for r in est))),
+    }
     return out
 
 
@@ -515,6 +556,45 @@ def _rule_markdown(name: str, blk: dict) -> list[str]:
         L.append(f"- for comparison, alpha computed from the RAW fitted "
                  f"operators (what earlier versions reported, and not the "
                  f"theorem's quantity): {a['alpha_raw_operators']:.4f}")
+
+    sw = blk.get("alpha_q_sweep")
+    if sw:
+        qs = blk.get("q_summary", {})
+        L.append("\n**alpha under q-relaxed r-separability**\n")
+        L.append("The manuscript's gamma-tilde_g is an essential infimum, i.e. "
+                 "q -> 0. The separability probe puts the population error rate "
+                 "of the best tuned linear rule near 5-6% on this "
+                 "representation, so no q below that can be met and refusing "
+                 "alpha there says nothing about the geometry. Reading across "
+                 "rows shows where separability becomes attainable and how much "
+                 "alpha depends on that choice.\n")
+        L.append("| q | separable | gamma-tilde_maj | gamma-tilde_min | "
+                 "orientation | alpha |")
+        L.append("|---|---|---|---|---|---|")
+        for r in sw:
+            av = f"{r['alpha']:.4f}" if r["estimable"] else "not estimable"
+            gm = ("-" if not np.isfinite(r["gamma_tilde_maj"])
+                  else f"{r['gamma_tilde_maj']:.4f}")
+            gn = ("-" if not np.isfinite(r["gamma_tilde_min"])
+                  else f"{r['gamma_tilde_min']:.4f}")
+            L.append(f"| {r['q']:g} | {r['separable']} | {gm} | {gn} "
+                     f"| {r['orientation']} | {av} |")
+        L.append(f"\n- smallest q at which the r-block separates: "
+                 f"{qs.get('smallest_separating_q')}; smallest q at which alpha "
+                 f"is estimable: {qs.get('smallest_estimable_q')}")
+        rng_ = qs.get("alpha_range_over_estimable_q")
+        if rng_:
+            L.append(f"- alpha ranges over [{rng_[0]:.4f}, {rng_[1]:.4f}] "
+                     f"across the estimable rungs")
+            if qs.get("alpha_crosses_one"):
+                L.append("- **that range straddles alpha = 1, so the regime is "
+                         "decided by the choice of q rather than by the data.** "
+                         "No regime claim should be made from this rule without "
+                         "first justifying a q.")
+            else:
+                L.append("- the range stays on one side of alpha = 1, so the "
+                         "regime conclusion is robust to the choice of q even "
+                         "though the value is not")
     return L
 
 

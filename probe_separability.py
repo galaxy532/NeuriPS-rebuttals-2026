@@ -235,7 +235,7 @@ def _learning_curve(X, y, g, folds, seed, quantile):
 
 
 def analyse(bundle, tau, purity, quantile, use_sae, sae_l1, sae_epochs,
-            n_seeds, folds) -> dict:
+            n_seeds, folds, curve_blocks) -> dict:
     phi = standardize(bundle.phi)
     y, g = bundle.y, bundle.g
 
@@ -256,8 +256,7 @@ def analyse(bundle, tau, purity, quantile, use_sae, sae_l1, sae_epochs,
                  "basis": "sae" if use_sae else "raw", "tau": tau,
                  "sae": sae_info, "meta": bundle.meta, "blocks": {}}
 
-    out["blocks"]["full"] = _eval_block(source, y, g, n_seeds, folds, quantile)
-    out["learning_curve"] = _learning_curve(source, y, g, folds, 0, quantile)
+    columns = {"full": np.arange(d)}
 
     rules = {}
     if bundle.place is not None:
@@ -274,8 +273,33 @@ def analyse(bundle, tau, purity, quantile, use_sae, sae_l1, sae_epochs,
         for bname, cols in (("r", idx_r), ("s", idx_s),
                             ("weak", np.flatnonzero(~lab))):
             if cols.size >= 2:
-                out["blocks"][f"{name}:{bname}"] = _eval_block(
-                    source[:, cols], y, g, n_seeds, folds, quantile)
+                columns[f"{name}:{bname}"] = cols
+
+    for name, cols in columns.items():
+        out["blocks"][name] = _eval_block(source[:, cols], y, g, n_seeds,
+                                          folds, quantile)
+
+    # -- learning curves, PER BLOCK ------------------------------------------
+    # Running the curve only on the full representation was misleading on the
+    # SAE basis: there "full" is all 8192 columns, which is the worst-performing
+    # block (held-out 0.7947, below its own 108-column r-subset at 0.9474)
+    # because the signal is swamped by thousands of rarely-active units. Its
+    # curve was still climbing, but extrapolating it says nothing about whether
+    # the CAUSAL block has saturated -- and that is the question r-separability
+    # turns on. Each block therefore gets its own curve.
+    #
+    # `curve_blocks` defaults to the full representation plus each rule's
+    # r-block, since the s- and weak-block curves cost the same and answer
+    # nothing about separability. Pass "all" to include them anyway.
+    if curve_blocks == ["all"]:
+        wanted = list(columns)
+    else:
+        wanted = [k for k in columns
+                  if k == "full" or k.endswith(":r") or k in curve_blocks]
+    out["learning_curves"] = {
+        name: _learning_curve(source[:, columns[name]], y, g, folds, 0, quantile)
+        for name in wanted
+    }
     return out
 
 
@@ -303,24 +327,38 @@ def to_text(res: dict) -> str:
              "uses. Where it sits far below the tuned probe, the pipeline's "
              "separability numbers reflect the solver, not the representation.")
 
-    L.append("\n**Learning curve on the full representation** (evaluation set "
-             "held fixed; C retuned at each size)\n")
-    L.append("| train n | C | train acc | held-out acc |")
-    L.append("|---|---|---|---|")
-    for r in res["learning_curve"]:
-        L.append(f"| {r['n_train']} | {r['C']:g} | {r['train_acc']:.4f} "
-                 f"| {r['holdout_acc']:.4f} |")
-
-    lc = res["learning_curve"]
-    if len(lc) >= 2:
-        gain = lc[-1]["holdout_acc"] - lc[-2]["holdout_acc"]
-        L.append(f"\n- accuracy gained over the last doubling of data: "
-                 f"{gain:+.4f}")
-        L.append("- a curve that has flattened well below 1.0 means the ceiling "
-                 "is a property of the representation, so r-separability fails "
-                 "in the population and alpha is not estimable on this data. A "
-                 "curve still climbing means we are sample-limited and the "
-                 "question is open.")
+    L.append("\n**Learning curves, per block** (evaluation set held fixed; "
+             "C retuned at each size)\n")
+    L.append("Read the r-block curves, not the `full` one. On the SAE basis "
+             "`full` is all 8192 columns, the worst-performing block, so its "
+             "curve describes noise saturating rather than signal.\n")
+    for name, lc in res.get("learning_curves", {}).items():
+        if not lc:
+            continue
+        L.append(f"\n_{name}_\n")
+        L.append("| train n | C | train acc | held-out acc |")
+        L.append("|---|---|---|---|")
+        for r in lc:
+            L.append(f"| {r['n_train']} | {r['C']:g} | {r['train_acc']:.4f} "
+                     f"| {r['holdout_acc']:.4f} |")
+        if len(lc) >= 3:
+            g1 = lc[-2]["holdout_acc"] - lc[-3]["holdout_acc"]
+            g2 = lc[-1]["holdout_acc"] - lc[-2]["holdout_acc"]
+            L.append(f"- last two gains: {g1:+.4f}, then {g2:+.4f}; "
+                     f"final held-out {lc[-1]['holdout_acc']:.4f}")
+            if g2 < 0.005 and lc[-1]["holdout_acc"] < 0.99:
+                L.append("  -> **flattened below 1.0**: the ceiling is a "
+                         "property of the representation, so r-separability "
+                         "fails in the population for this block and alpha is "
+                         "not estimable at q -> 0. Use the q-sweep in "
+                         "analyze.py to state what IS estimable.")
+            elif lc[-1]["holdout_acc"] >= 0.99:
+                L.append("  -> approaching 1.0: consistent with r-separability "
+                         "holding for this block")
+            else:
+                L.append("  -> still climbing: sample-limited, so the ceiling "
+                         "is not yet established and no conclusion about "
+                         "r-separability should be drawn from this block")
     return "\n".join(L)
 
 
@@ -351,13 +389,20 @@ def main() -> None:
     ap.add_argument("--quantile", type=float, default=0.01)
     ap.add_argument("--n-seeds", type=int, default=DEFAULTS["n_seeds"])
     ap.add_argument("--inner-folds", type=int, default=DEFAULTS["inner_folds"])
+    ap.add_argument("--curve-blocks", nargs="+", default=["default"],
+                    help="which blocks get a learning curve. Default is the "
+                         "full representation plus each rule's r-block, since "
+                         "those are the ones r-separability turns on. Pass "
+                         "'all' for every block, or name blocks explicitly "
+                         "(e.g. 'sign-flip:s').")
     args = ap.parse_args()
 
     bundle = FeatureBundle.load(args.bundle)
     res = analyse(bundle, tau=args.tau, purity=args.purity,
                   quantile=args.quantile, use_sae=args.sae,
                   sae_l1=args.sae_l1, sae_epochs=args.sae_epochs,
-                  n_seeds=args.n_seeds, folds=args.inner_folds)
+                  n_seeds=args.n_seeds, folds=args.inner_folds,
+                  curve_blocks=args.curve_blocks)
     res["settings"] = {k: getattr(args, k) for k in DEFAULTS}
     res["settings"].update({"bundle": args.bundle, "sae": bool(args.sae)})
 
