@@ -36,15 +36,18 @@
 
 p-value floor with 50 permutations: 0.0196. Cells below the minimum are refused, not reported. Refused: 0; reported but unreliable: 0.
 
-| y | g | n | R2_cv | null mean | null q95 | p | note |
-|---|---|---|---|---|---|---|---|
-| -1 | 0 | 2255 | -0.186 | -0.2772 | -0.2727 | 0.0196 |  |
-| -1 | 1 | 2255 | -0.195 | -0.2770 | -0.2731 | 0.0196 |  |
-| +1 | 0 | 642 | -2.243 | -2.8946 | -2.8009 | 0.0196 |  |
-| +1 | 1 | 642 | -2.272 | -2.9473 | -2.8259 | 0.0196 |  |
+| y | g | n | ridge alpha | R2_cv | perm null | p_perm | RANDOM-SPLIT null | p_vs_random | note |
+|---|---|---|---|---|---|---|---|---|---|
+| -1 | 0 | 2255 | 1e+04 | 0.023 | -0.0046 | 0.0196 | +0.0305 | 1.0000 |  |
+| -1 | 1 | 2255 | 1e+04 | 0.018 | -0.0037 | 0.0196 | +0.0269 | 1.0000 |  |
+| +1 | 0 | 642 | 1e+04 | 0.016 | -0.0037 | 0.0196 | +0.0263 | 1.0000 |  |
+| +1 | 1 | 642 | 1e+04 | 0.012 | -0.0033 | 0.0196 | +0.0222 | 1.0000 |  |
 
-- pooled (marginal) R2 = -0.032  vs mean within-cell R2 = -1.224
+- pooled (marginal) R2 = 0.025  vs mean within-cell R2 = 0.017
 - The pooled figure is inflated by label-mediation; the within-cell figure conditions on (y, g) and is the one that speaks to feature-mediation.
+- The ridge penalty is now TUNED per cell rather than fixed at 1.0. With the old fixed value the permutation null mean reproduced -p/(n-p) to three significant figures, i.e. the estimator was behaving as unregularised OLS and the R2 tracked d_r/n rather than the data.
+- **Two nulls, and they answer different questions.** `p_perm` (floor 0.0196) permutes rows: is there ANY dependence between the two blocks? `p_vs_random` (floor 0.0476, 20 draws) re-partitions the SAME columns into blocks of the SAME sizes at random: does the IDENTIFIED assignment couple more than an arbitrary one?
+- Only the second bears on feature-mediation. Any two column blocks of a neural representation are correlated, so passing the permutation null alone shows only that the representation has internal structure. Passing the random-split null shows the split is not arbitrary -- necessary, still not sufficient for a feature-mediation claim. Failing it settles the question negatively.
 
 **Distance from the isotropic regime**
 
@@ -97,15 +100,18 @@ The manuscript's gamma-tilde_g is an essential infimum, i.e. q -> 0. The separab
 
 p-value floor with 50 permutations: 0.0196. Cells below the minimum are refused, not reported. Refused: 0; reported but unreliable: 0.
 
-| y | g | n | R2_cv | null mean | null q95 | p | note |
-|---|---|---|---|---|---|---|---|
-| -1 | 0 | 2255 | 0.016 | -0.0661 | -0.0626 | 0.0196 |  |
-| -1 | 1 | 2255 | 0.026 | -0.0661 | -0.0625 | 0.0196 |  |
-| +1 | 0 | 642 | -0.087 | -0.2952 | -0.2741 | 0.0196 |  |
-| +1 | 1 | 642 | -0.128 | -0.3034 | -0.2790 | 0.0196 |  |
+| y | g | n | ridge alpha | R2_cv | perm null | p_perm | RANDOM-SPLIT null | p_vs_random | note |
+|---|---|---|---|---|---|---|---|---|---|
+| -1 | 0 | 2255 | 1e+03 | 0.048 | -0.0202 | 0.0196 | +0.1104 | 1.0000 |  |
+| -1 | 1 | 2255 | 1e+03 | 0.053 | -0.0190 | 0.0196 | +0.1083 | 1.0000 |  |
+| +1 | 0 | 642 | 1e+03 | 0.070 | -0.0306 | 0.0196 | +0.1248 | 1.0000 |  |
+| +1 | 1 | 642 | 1e+03 | 0.048 | -0.0283 | 0.0196 | +0.1195 | 1.0000 |  |
 
-- pooled (marginal) R2 = 0.061  vs mean within-cell R2 = -0.043
+- pooled (marginal) R2 = 0.066  vs mean within-cell R2 = 0.055
 - The pooled figure is inflated by label-mediation; the within-cell figure conditions on (y, g) and is the one that speaks to feature-mediation.
+- The ridge penalty is now TUNED per cell rather than fixed at 1.0. With the old fixed value the permutation null mean reproduced -p/(n-p) to three significant figures, i.e. the estimator was behaving as unregularised OLS and the R2 tracked d_r/n rather than the data.
+- **Two nulls, and they answer different questions.** `p_perm` (floor 0.0196) permutes rows: is there ANY dependence between the two blocks? `p_vs_random` (floor 0.0476, 20 draws) re-partitions the SAME columns into blocks of the SAME sizes at random: does the IDENTIFIED assignment couple more than an arbitrary one?
+- Only the second bears on feature-mediation. Any two column blocks of a neural representation are correlated, so passing the permutation null alone shows only that the representation has internal structure. Passing the random-split null shows the split is not arbitrary -- necessary, still not sufficient for a feature-mediation claim. Failing it settles the question negatively.
 
 **Distance from the isotropic regime**
 
