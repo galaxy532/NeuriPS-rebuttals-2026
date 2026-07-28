@@ -46,8 +46,28 @@ threshold preferentially retains exactly the units it was meant to exclude.
 Selectivity is the `--purity` gate's job, and it can only succeed on a
 dictionary that contains selective units.
 
-READING THE OUTPUT: THREE FAILURES THAT ARE REPORTED, NOT HIDDEN
-================================================================
+WHICH EIGENVALUES FEED alpha
+============================
+Theorem D.4 (Eq 44) is stated in the isotropic regime, and Section C ("Scope of
+the Isotropic Regime") supplies that regime by REPARAMETRISING: A = A' + u_A v^T,
+B = B' + u_B v^T, with A'v, B'v in the subspace K of Eq (38). The eigenvalues
+the theorem consumes are the primed ones,
+
+    mu_A' = ||A'v||^2,   mu_B' = ||B'v||^2,   mu' = A'v . B'v,
+
+not the raw ||A_hat v||^2 of the ridge-fitted operators. A generic fitted pair is
+NOT isotropic -- that is the premise of Section C, not a defect of the fit -- so
+feeding the raw eigenvalues into Eq (44) computes a different quantity. Both sets
+are printed; alpha is built from the primed ones, and the raw-operator value is
+shown beside it only so the size of the difference is visible.
+
+READING THE OUTPUT: FOUR FAILURES THAT ARE REPORTED, NOT HIDDEN
+===============================================================
+  "No isotropic (A',B')   dim K = 0, so Eq (38) has no admissible solution and
+   exists"                Theorem D.4 has no hypothesis. Section C guarantees
+                          dim K > 0 when d_s >= 2 d_r - 1 -- sufficient, not
+                          necessary. alpha is refused rather than evaluated at
+                          degenerate zero eigenvalues.
   "alpha: NOT ESTIMABLE"   The r-block is not separable at the working quantile,
                            so gamma-tilde_g does not exist. No regime is claimed.
                            A nan is never printed as "geometry dominates".
@@ -186,7 +206,7 @@ def _downstream(source, y, g, ident, n_perm, quantile, seed, min_cell) -> dict:
         phi_r, phi_s, y, g, n_perm=n_perm, seed=seed, min_cell=min_cell
     )
 
-    mf = fit_margin_direction(phi_r, y, g, quantile=quantile)
+    mf = fit_margin_direction(phi_r, y, g, quantile=quantile, seed=seed)
     A_hat, B_hat = fit_operators(phi_r, phi_s, g)
     iso = iso_diagnostics(A_hat, B_hat, mf.v_hat, phi_r)
     out["margins"] = {
@@ -201,6 +221,12 @@ def _downstream(source, y, g, ident, n_perm, quantile, seed, min_cell) -> dict:
     }
     out["isotropy"] = {
         "mu_A": iso.mu_A, "mu_B": iso.mu_B, "mu": iso.mu,
+        "mu_A_prime": iso.mu_A_prime, "mu_B_prime": iso.mu_B_prime,
+        "mu_prime": iso.mu_prime,
+        "u_A_norm": iso.u_A_norm, "u_B_norm": iso.u_B_norm,
+        "reparam_exists": iso.reparam_exists,
+        "attractive_satisfiable": iso.attractive_satisfiable,
+        "attractive_prime": iso.attractive_prime,
         "defects": iso.defects, "defects_scaled": iso.defects_scaled,
         "degenerate": iso.degenerate, "max_defect": iso.max_defect,
         "d_star": iso.d_star, "d_star_relative": iso.d_star_relative,
@@ -381,10 +407,36 @@ def _rule_markdown(name: str, blk: dict) -> list[str]:
     L.append("\n- 'degenerate' marks products whose M v is negligible, where "
              "the angle-based defect is 0/0 and only the scaled column is "
              "meaningful.")
-    L.append(f"- mu_A = {iso['mu_A']:.4f}, mu_B = {iso['mu_B']:.4f}, "
-             f"mu = {iso['mu']:+.4f}")
-    L.append(f"- attractive condition -1 <= mu < min(mu_A, mu_B): "
-             f"{iso['attractive_condition_holds']}")
+    L.append(f"- RAW fitted operators (diagnostic only): mu_A = {iso['mu_A']:.4f}, "
+             f"mu_B = {iso['mu_B']:.4f}, mu = {iso['mu']:+.4f}; attractive "
+             f"-1 <= mu < min(mu_A, mu_B): {iso['attractive_condition_holds']}")
+    L.append("\n**Isotropic reparametrisation (Section C, Eqs 37-40)**\n")
+    if not iso.get("reparam_exists", False):
+        L.append("- **No isotropic (A', B') exists: dim K = 0.** The two kernels "
+                 "of Eq (38) intersect trivially, so there is no admissible "
+                 "A'v, the primed eigenvalues are all 0 by degeneracy rather "
+                 "than by measurement, and Theorem D.4 has no hypothesis to "
+                 "stand on. Section C guarantees dim K > 0 when "
+                 "d_s >= 2 d_r - 1; that is sufficient, not necessary, so a "
+                 "rank-deficient fit can still give dim K > 0 without it.")
+    else:
+        L.append(f"- A'v, B'v obtained by projecting onto K (dim K = "
+                 f"{iso['dim_K']}), the d*-minimal choice in Eq (40)")
+        L.append(f"- **mu_A' = {iso['mu_A_prime']:.4f}, "
+                 f"mu_B' = {iso['mu_B_prime']:.4f}, "
+                 f"mu' = {iso['mu_prime']:+.4f}** <- these are Theorem D.4's inputs")
+        L.append(f"- absorbed displacement: ||u_A|| = {iso['u_A_norm']:.4f}, "
+                 f"||u_B|| = {iso['u_B_norm']:.4f}. Section C notes these "
+                 "inflate the amplitude bound to R' = R + K_sup max(||u_A||, "
+                 "||u_B||) and reduce the signal strength, so the noise "
+                 "condition can fail when they are large.")
+        L.append(f"- attractive at the d*-minimal choice: "
+                 f"{iso['attractive_prime']}; satisfiable by perturbing within "
+                 f"K (needs dim K >= 2): {iso['attractive_satisfiable']}")
+        if not iso["attractive_prime"] and iso["attractive_satisfiable"]:
+            L.append("  - the cheapest reparametrisation misses the attractive "
+                     "condition, but dim K >= 2 means a perturbation within K "
+                     "can break the positive collinearity at slightly larger d*")
     L.append(f"- d_r = {iso['d_r']}, d_s = {iso['d_s']}, "
              f"d_s >= 2 d_r: {iso['d_s_ge_2d_r']}, dim K = {iso['dim_K']}")
     L.append(f"- d* = {iso['d_star']:.4f} (relative {iso['d_star_relative']:.4f}); "
@@ -416,12 +468,16 @@ def _rule_markdown(name: str, blk: dict) -> list[str]:
                  "billions in `raw_min_margin` are an artefact of the 1e-9 "
                  "clamp, not measurements.")
     if a.get("estimable", True):
-        L.append(f"- **alpha = {a['alpha']:.4f}** -> {a['regime']}; "
-                 f"predicted minority exponent max(alpha,1) = "
+        L.append(f"- **alpha = {a['alpha']:.4f}** (from mu_A', mu' -- Eq 44) "
+                 f"-> {a['regime']}; predicted minority exponent max(alpha,1) = "
                  f"{a['predicted_minority_exponent']:.4f}")
     else:
         L.append(f"- **alpha: NOT ESTIMABLE.** {a['failure_reason']}. No regime "
                  "is claimed for this rule.")
+    if np.isfinite(a.get("alpha_raw_operators", float("nan"))):
+        L.append(f"- for comparison, alpha computed from the RAW fitted "
+                 f"operators (what earlier versions reported, and not the "
+                 f"theorem's quantity): {a['alpha_raw_operators']:.4f}")
     return L
 
 

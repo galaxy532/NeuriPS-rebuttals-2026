@@ -174,6 +174,7 @@ def fit_margin_direction(
     g: np.ndarray,
     C: float = 1e6,
     quantile: float = 0.01,
+    seed: int = 0,
 ) -> MarginFit:
     """Estimate v and the group r-margins gamma-tilde_g.
 
@@ -216,8 +217,31 @@ def fit_margin_direction(
     convergence, that is informative: it means the r-block is far from
     separable at this C, which is exactly the situation the RuntimeWarning
     below is meant to surface.
+
+    Determinism (`seed`)
+    --------------------
+    `LinearSVC` defaults to `random_state=None`, and with `loss="hinge"` the
+    solver is dual coordinate descent, which SHUFFLES the order in which
+    coordinates are updated using that generator. Leaving it unset therefore
+    made this function non-deterministic: repeated fits on byte-identical input
+    returned different directions, and because `level` is read off a quantile of
+    the resulting margins, the group r-margins gamma-tilde_g -- and hence alpha,
+    which is linear in them -- inherited that variation directly. Measured on
+    one bundle, the 1% quantile margin ranged over [0.367, 0.925] across four
+    identical calls; with `random_state` fixed the four agreed to every digit.
+
+    On the Waterbirds raw/two-concept split this moved alpha from 0.811 to 1.144
+    between two runs of unchanged code -- across the alpha = 1 boundary that
+    separates the manuscript's two regimes. Seeding makes the number
+    REPRODUCIBLE; it does not make it stable. The underlying cause is that at
+    C = 1e6 the problem is close to degenerate and the solve does not converge,
+    so different coordinate orders stop in different places. The real remedy is
+    to solve the hard-margin program directly, which has a unique solution
+    whenever the r-block separates -- and when it does not separate, `v` does
+    not exist and the honest output is the non-estimable branch below.
     """
-    svm = LinearSVC(C=C, fit_intercept=False, loss="hinge", max_iter=20_000, tol=1e-4)
+    svm = LinearSVC(C=C, fit_intercept=False, loss="hinge", max_iter=20_000,
+                    tol=1e-4, random_state=seed)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         svm.fit(phi_r, y)
@@ -327,9 +351,29 @@ def fit_operators(
 
 @dataclass
 class IsoDiagnostics:
+    # -- RAW fitted operators. Diagnostic only. --------------------------------
+    # These are ||A_hat v||^2 etc. for the ridge-fitted A_hat, B_hat. Section C
+    # never claims the FITTED pair is isotropic -- its whole point is that a
+    # generic (A, B) is not, and that one recovers isotropy by reparametrising.
+    # So these are the right numbers for asking "how far from isotropic is the
+    # raw fit?" and the WRONG ones to put into alpha.
     mu_A: float
     mu_B: float
     mu: float
+
+    # -- PRIMED operators: mu_A' = ||A'v||^2, mu_B' = ||B'v||^2, mu' = A'v.B'v -
+    # Section C, immediately after Eq (40). These are Theorem D.4's inputs and
+    # the ones alpha (Eq 44) must be computed from.
+    mu_A_prime: float
+    mu_B_prime: float
+    mu_prime: float
+    u_A_norm: float          # ||u_A|| = ||Av - A'v||, the absorbed displacement
+    u_B_norm: float          # ||u_B|| = ||Bv - B'v||
+    reparam_exists: bool     # dim K > 0: is there any isotropic (A', B') at all?
+    attractive_satisfiable: bool   # dim K >= 2, Section C's condition for
+                                   # breaking positive collinearity within K
+    attractive_prime: bool   # -1 <= mu' < min(mu_A', mu_B') at the d*-minimal
+                             # choice specifically (see note in iso_diagnostics)
     defects: dict            # angle-based deviation from the common-eigenvector condition
     defects_scaled: dict     # off-axis component normalised by ||M||_2 (safe when Mv ~ 0)
     degenerate: dict         # per-product flag: is ||Mv|| too small for the angle to mean anything
@@ -345,14 +389,51 @@ class IsoDiagnostics:
 
 
 def _kperp_residual(A, B, v, rtol):
-    """Relative size of the part of (Av, Bv) that falls outside the subspace K.
+    """The isotropic reparametrisation of (A, B): K, the projections, and d*.
 
-    K := ker(Pi_perp . A^T) cap ker(Pi_perp . B^T) is computed as a numerical
-    null space. The rank cutoff matters: with ESTIMATED operators the "zero"
-    singular values sit at the noise floor, not at machine epsilon, so a cutoff
-    of `eps` would classify noise directions as part of the range and shrink K
-    to nothing. We therefore cut relative to the largest singular value and
-    expose `rtol` so its influence can be reported rather than hidden.
+    Implements manuscript Section C, "Scope of the Isotropic Regime", Eqs
+    (37)-(40). Writing
+
+        A = A' + u_A v^T,   B = B' + u_B v^T,                            (37)
+
+    the pair (A', B') is isotropic exactly when
+
+        A'v, B'v  in  K := ker(Pi_bar_v . A^T) cap ker(Pi_bar_v . B^T),  (38)
+
+    with Pi_bar_v the projector onto Span{v}^perp of Eq (22). Note K is defined
+    from the UNPRIMED operators, and that is not a slip in the manuscript: since
+    A'^T = A^T - v u_A^T, the extra term is parallel to v and is annihilated by
+    Pi_bar_v, so ker(Pi_bar_v . A'^T) = ker(Pi_bar_v . A^T). The kernel does not
+    move when we reparametrise.
+
+    Minimising the displacement (39) over A'v, B'v in K is then an orthogonal
+    projection onto K, giving
+
+        A'v = Pi_K (A v),   B'v = Pi_K (B v),
+        d*  = K_sup ( ||Pi_{K^perp} (A v)|| + ||Pi_{K^perp} (B v)|| ).    (40)
+
+    We return the projections themselves and not merely the residual norm: they
+    are what Section C's eigenvalues mu_A' = ||A'v||^2, mu_B' = ||B'v||^2 and
+    mu' = A'v . B'v are built from, and those primed eigenvalues -- NOT the raw
+    ||A_hat v||^2 -- are what Theorem D.4's alpha (Eq 44) takes as input.
+
+    The rank cutoff matters: with ESTIMATED operators the "zero" singular values
+    sit at the noise floor, not at machine epsilon, so a cutoff of `eps` would
+    classify noise directions as part of the range and shrink K to nothing. We
+    cut relative to the largest singular value and expose `rtol` so its
+    influence can be reported rather than hidden. This tolerance is load
+    bearing: it alone decides dim K, and hence whether a reparametrisation is
+    judged to exist at all.
+
+    Returns
+    -------
+    resid, scale : float
+        Numerator and normaliser of d_star_relative.
+    dim_K : int
+    Avp, Bvp : (d_s,) arrays
+        A'v and B'v, the projections onto K. Zero vectors when dim K == 0.
+    Av, Bv : (d_s,) arrays
+        The unprojected A v and B v, for reporting u_A = Av - A'v.
     """
     d_r = v.shape[0]
     d_s = A.shape[0]
@@ -363,11 +444,13 @@ def _kperp_residual(A, B, v, rtol):
     rank = int((sv > cut).sum())
     K_basis = Vt[rank:].T
     proj_K = K_basis @ K_basis.T if K_basis.size else np.zeros((d_s, d_s))
-    Pi_Kperp = np.eye(d_s) - proj_K
+
     Av, Bv = A @ v, B @ v
-    resid = np.linalg.norm(Pi_Kperp @ Av) + np.linalg.norm(Pi_Kperp @ Bv)
+    Avp, Bvp = proj_K @ Av, proj_K @ Bv          # A'v and B'v of Eq (38)
+    resid = np.linalg.norm(Av - Avp) + np.linalg.norm(Bv - Bvp)
     scale = np.linalg.norm(Av) + np.linalg.norm(Bv)
-    return resid, scale, int(K_basis.shape[1]) if K_basis.size else 0
+    dim_K = int(K_basis.shape[1]) if K_basis.size else 0
+    return resid, scale, dim_K, Avp, Bvp, Av, Bv
 
 
 def iso_diagnostics(
@@ -463,14 +546,43 @@ def iso_diagnostics(
     live = [d for k, d in defects.items() if not degenerate[k] and np.isfinite(d)]
 
     K_sup = float(np.max(np.linalg.norm(phi_r, axis=1)))
-    resid, scale, dim_K = _kperp_residual(A, B, v, rank_rtol)
+    resid, scale, dim_K, Avp, Bvp, Av_, Bv_ = _kperp_residual(A, B, v, rank_rtol)
     sens = {}
     for rt in (1e-6, 1e-4, 1e-3, 1e-2, 1e-1):
-        r_, s_, _ = _kperp_residual(A, B, v, rt)
+        r_, s_, *_ = _kperp_residual(A, B, v, rt)
         sens[f"{rt:g}"] = float(r_ / s_) if s_ > 1e-15 else 0.0
+
+    # Section C's eigenvalues, from the projected (isotropic) operators.
+    #
+    # When dim K == 0 the projector is the zero map, so A'v = B'v = 0 and all
+    # three primed eigenvalues are 0. That is not a measurement of an isotropic
+    # pair with small eigenvalues -- it is the statement that NO isotropic
+    # reparametrisation exists, so Theorem D.4 has no hypothesis to stand on.
+    # `reparam_exists` records the distinction, and compute_alpha refuses to
+    # produce a number in that case rather than returning the degenerate
+    # alpha = gamma-tilde_min that 0/0-style eigenvalues would give.
+    mu_A_p = float(Avp @ Avp)
+    mu_B_p = float(Bvp @ Bvp)
+    mu_p = float(Avp @ Bvp)
+
+    # Caveat on `attractive_prime`. The orthogonal projection is the d*-MINIMAL
+    # choice of (A', B'), not the only admissible one: Section C notes that with
+    # dim K >= 2 one may perturb A'v, B'v within K to break positive
+    # collinearity and satisfy the attractive condition, at the cost of a
+    # slightly larger d*. So attractive_prime == False does NOT mean the
+    # attractive regime is unreachable; it means the cheapest reparametrisation
+    # does not reach it. `attractive_satisfiable` (dim K >= 2) is the condition
+    # for a perturbation to exist at all.
+    attractive_p = bool(-1.0 <= mu_p < min(mu_A_p, mu_B_p)) if dim_K > 0 else False
 
     return IsoDiagnostics(
         mu_A=mu_A, mu_B=mu_B, mu=mu,
+        mu_A_prime=mu_A_p, mu_B_prime=mu_B_p, mu_prime=mu_p,
+        u_A_norm=float(np.linalg.norm(Av_ - Avp)),
+        u_B_norm=float(np.linalg.norm(Bv_ - Bvp)),
+        reparam_exists=bool(dim_K > 0),
+        attractive_satisfiable=bool(dim_K >= 2),
+        attractive_prime=attractive_p,
         defects=defects,
         defects_scaled=defects_scaled,
         degenerate=degenerate,
@@ -502,18 +614,42 @@ def compute_alpha(mf: MarginFit, iso: IsoDiagnostics) -> dict:
     1/(eps z_t) below the transition and as z_t^{-alpha} (ln z_t)^{alpha-1}
     above it.
     """
+    # Theorem D.4 (Eq 44) reads alpha := gamma-tilde_min (1 + mu) / (1 + mu_A)
+    # where, per Section C, the eigenvalues are those of the REPARAMETRISED
+    # pair: mu_A' = ||A'v||^2, mu_B' = ||B'v||^2, mu' = A'v . B'v. An earlier
+    # version fed the raw fitted ||A_hat v||^2 into this formula instead. That
+    # is a different quantity: Section C exists precisely because a generic
+    # fitted (A, B) is NOT isotropic, so the raw eigenvalues are not the ones
+    # the theorem's hypothesis supplies. The unprimed values are still returned
+    # below, as a diagnostic of how far the fit sits from isotropy, but alpha is
+    # computed from the primed ones.
     if mf.orientation == "standard":
-        gam_adv, mu_diag = mf.gam_tilde[1], iso.mu_A
+        gam_adv, mu_diag = mf.gam_tilde[1], iso.mu_A_prime
+        mu_diag_raw = iso.mu_A
         advantaged = "minority"
     elif mf.orientation == "mirror":
-        gam_adv, mu_diag = mf.gam_tilde[0], iso.mu_B
+        gam_adv, mu_diag = mf.gam_tilde[0], iso.mu_B_prime
+        mu_diag_raw = iso.mu_B
         advantaged = "majority"
     else:  # "undefined": the margin fit failed, so there is no advantaged group
-        gam_adv, mu_diag = float("nan"), float("nan")
+        gam_adv, mu_diag, mu_diag_raw = float("nan"), float("nan"), float("nan")
         advantaged = "undefined"
 
     denom = 1.0 + mu_diag
-    alpha = float(gam_adv * (1.0 + iso.mu) / denom) if denom != 0 else float("nan")
+    if not iso.reparam_exists:
+        # dim K == 0: no isotropic (A', B') exists, so there is nothing for
+        # Eq (44) to be evaluated at. Computing it anyway would silently return
+        # gamma-tilde_min, since all three primed eigenvalues are then 0.
+        alpha = float("nan")
+    else:
+        alpha = float(gam_adv * (1.0 + iso.mu_prime) / denom) if denom != 0 \
+            else float("nan")
+
+    # Reported alongside, for comparison only: what the old code would have
+    # produced from the raw fitted operators.
+    denom_raw = 1.0 + mu_diag_raw
+    alpha_raw_operators = float(gam_adv * (1.0 + iso.mu) / denom_raw) \
+        if denom_raw != 0 else float("nan")
 
     # A non-finite alpha must be reported as a failure, never as a regime.
     #
@@ -536,7 +672,17 @@ def compute_alpha(mf: MarginFit, iso: IsoDiagnostics) -> dict:
     else:
         regime = "UNDEFINED -- alpha was not estimable; see failure_reason"
         predicted = float("nan")
-        if not mf.separable_at_quantile:
+        if not iso.reparam_exists:
+            failure_reason = (
+                "dim K = 0, so no isotropic reparametrisation (A', B') exists "
+                "(Section C, Eq 38): the intersection of the two kernels is "
+                "trivial, there is no admissible A'v, and Theorem D.4's "
+                "hypothesis is unavailable. Section C guarantees dim K > 0 only "
+                "when d_s >= 2 d_r - 1, which this split does not satisfy; note "
+                "that is a SUFFICIENT condition, so dim K can be positive "
+                "without it when the fitted operators are rank deficient"
+            )
+        elif not mf.separable_at_quantile:
             failure_reason = (
                 "the r-block is not separable at the "
                 f"{mf.quantile:.0%} quantile -- only {mf.frac_correct:.2%} of "
@@ -560,12 +706,21 @@ def compute_alpha(mf: MarginFit, iso: IsoDiagnostics) -> dict:
         "orientation": mf.orientation,
         "advantaged_group": advantaged,
         "gamma_tilde_advantaged": float(gam_adv),
+        # Section C / Theorem D.4 inputs -- what alpha is actually built from.
         "mu_diagonal_used": float(mu_diag),
+        "mu_prime": float(iso.mu_prime),
+        "reparam_exists": bool(iso.reparam_exists),
+        "attractive_satisfiable": bool(iso.attractive_satisfiable),
+        # Raw fitted operators, for comparison only. `alpha_raw_operators` is
+        # what the previous version of this function returned; it is kept so the
+        # size of the correction is visible rather than silently absorbed.
+        "mu_diagonal_raw": float(mu_diag_raw),
         "mu": float(iso.mu),
+        "alpha_raw_operators": alpha_raw_operators,
         "regime": regime,
         "predicted_minority_exponent": predicted,
-        "critical_gamma": float(denom / (1.0 + iso.mu))
-                          if (1.0 + iso.mu) != 0 else float("nan"),
+        "critical_gamma": float(denom / (1.0 + iso.mu_prime))
+                          if (1.0 + iso.mu_prime) != 0 else float("nan"),
     }
 
 
