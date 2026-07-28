@@ -284,13 +284,50 @@ def run(bundle: FeatureBundle, tau: float = DEFAULTS["tau"],
         # at initialisation, so avg_active ~ d_hidden/2 means the L1 penalty has
         # not moved the dictionary off its random start and the "sparse" in
         # sparse autoencoder is not yet doing any work.
+        acts = sae["activations"]
+        n_dead = int((acts > 0).sum(axis=0).__eq__(0).sum())
+        n_const = int((acts.std(axis=0) < 1e-12).sum())
+
+        # STANDARDISE THE ACTIVATIONS, not just the input to the autoencoder.
+        #
+        # `phi` above was standardised before `fit_sae`, but the encoder ends in
+        # a ReLU, so the activations it returns are NON-NEGATIVE and uncentred:
+        # the centring does not survive the nonlinearity. That matters because
+        # `fit_margin_direction` and `fit_operators` both run with
+        # fit_intercept=False -- correct, since the manuscript's model carries no
+        # bias term -- and a model with no intercept puts its decision boundary
+        # through the ORIGIN. On strictly non-negative data the origin sits at
+        # the corner of the cloud rather than inside it, which is close to
+        # unsolvable when few columns are involved.
+        #
+        # The symptom was visible in the diagnostics: margin fits on small SAE
+        # column sets returned BELOW-chance accuracy (0.2761 held-out on the top
+        # 10 coordinates; 0.4275 for a whole two-concept s-block). Systematic
+        # sub-chance accuracy is not weak signal, it is a misspecified geometry.
+        #
+        # Note what this costs. Standardising a very sparse column amplifies its
+        # rare activations: a unit firing on 1% of rows becomes ~10 SD tall when
+        # it fires. That is the price of centring, and it is why `n_dead` and
+        # `n_near_constant` are reported -- so a reader can see how much of the
+        # dictionary is degenerate before reading anything downstream. Columns
+        # with zero variance are left alone by `standardize` (its sd guard maps
+        # them to 0), so dead units contribute nothing rather than exploding.
+        #
+        # Identification is unaffected either way: `two_concept_identify` divides
+        # by the pooled within-cell SD and both sign-flip statistics are
+        # correlations, so all three are already scale invariant. This changes
+        # only the margin fit, the operator fits and K_sup.
+        source = standardize(acts) if do_standardize else acts
+
         res["sae"] = {"var_explained": sae["var_explained"],
                       "avg_active": sae["avg_active"],
                       "d_hidden": sae["d_hidden"],
                       "l1": sae_l1,
                       "epochs": sae_epochs,
-                      "avg_active_at_init": sae["d_hidden"] / 2.0}
-        source = sae["activations"]
+                      "avg_active_at_init": sae["d_hidden"] / 2.0,
+                      "activations_standardised": bool(do_standardize),
+                      "n_dead": n_dead,
+                      "n_near_constant": n_const}
     else:
         source = phi
 
@@ -491,6 +528,14 @@ def to_markdown(res: dict) -> str:
         L.append(f"- SAE: d_hidden = {s['d_hidden']}, "
                  f"variance explained = {s['var_explained']:.4f}, "
                  f"avg active features = {s['avg_active']:.1f}")
+        if "n_dead" in s:
+            L.append(f"  - dead units (never active): {s['n_dead']}; "
+                     f"near-constant: {s['n_near_constant']}; "
+                     f"activations standardised: {s['activations_standardised']}")
+            L.append("  - activations are standardised AFTER the autoencoder: "
+                     "the encoder's ReLU destroys the centring of its input, and "
+                     "the margin and operator fits carry no intercept, so they "
+                     "need centred columns to be well posed.")
     if "warning" in res:
         L.append(f"\n> **Warning:** {res['warning']}\n")
     if "rule_agreement" in res:

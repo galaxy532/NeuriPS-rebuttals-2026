@@ -77,20 +77,71 @@ Runtime is dominated by the ladder in (C): each rung is one SVM on m columns,
 and the largest rungs cost the most. Expect a few minutes on the raw basis.
 Use --ladder to shorten it.
 
-Nothing is written to disk unless --save is passed; the output is meant to be
-read once and acted on.
+Output names are derived, exactly as in analyze.py: the stem carries the split
+and the basis, plus a short tag for every knob set away from its default, so two
+runs that differ in any parameter land in different files automatically and a
+repeat of the same settings overwrites itself.
+
+    python where_is_the_signal.py
+        -> signal_test_raw.{json,md}
+    python where_is_the_signal.py --sae --sae-l1 0.3 --sae-epochs 400 --tau 0.05
+        -> signal_test_sae_l1-0.3_ep-400_tau-0.05.{json,md}
+
+The ladder is tagged too (as L<rungs>-<largest>), because `smallest_separating_m`
+is the smallest rung that happened to be TESTED: a run that skips a rung cannot
+report it, so two ladders are not comparable and must not share a filename.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import warnings
 
 import numpy as np
 
 from common import FeatureBundle, fit_margin_direction, standardize
 from identify_rs import sign_flip_identify, two_concept_identify
+
+# Single source of truth for the defaults, as in analyze.py: the parser reads
+# them from here and `_auto_prefix` compares against the same values, so the
+# filename cannot drift away from the settings it claims to describe.
+DEFAULTS = {
+    "tau": 0.15,
+    "purity": 0.60,
+    "quantile": 0.01,
+    "seed": 0,
+    "sae_l1": 0.03,
+    "sae_epochs": 60,
+}
+_TAGS = {"tau": "tau", "purity": "pur", "quantile": "q", "seed": "seed",
+         "sae_l1": "l1", "sae_epochs": "ep"}
+_DEFAULT_LADDER = [5, 10, 20, 40, 80, 160, 320, 640, 1280, 2048]
+
+
+def _auto_prefix(args, res: dict) -> str:
+    """Derive the output stem from the run's own settings. See analyze.py."""
+    split = str(res.get("meta", {}).get("split", "")) or \
+        os.path.splitext(os.path.basename(args.bundle))[0].split("_")[-1]
+    parts = [f"signal_{split}_{res['basis']}"]
+
+    keys = ["tau", "purity", "quantile", "seed"]
+    if args.sae:
+        keys = ["sae_l1", "sae_epochs"] + keys
+    for k in keys:
+        v = getattr(args, k)
+        if v != DEFAULTS[k]:
+            parts.append(f"{_TAGS[k]}-{v:g}")
+
+    # The ladder decides which subset sizes were tried at all, and
+    # `smallest_separating_m` is by definition the smallest rung TESTED. A run
+    # on a coarser ladder can report a larger m purely because it skipped the
+    # rung that would have separated, so ladders must not share a stem.
+    lad = sorted(args.ladder)
+    if lad != _DEFAULT_LADDER:
+        parts.append(f"L{len(lad)}-{lad[-1]}")
+    return "_".join(parts)
 
 
 def _fit(phi, y, g, quantile, seed):
@@ -142,10 +193,20 @@ def analyse(bundle: FeatureBundle, tau: float, purity: float, quantile: float,
     if use_sae:
         from identify_rs import fit_sae
         sae = fit_sae(phi, seed=seed, l1=sae_l1, epochs=sae_epochs)
-        source = sae["activations"]
+        acts = sae["activations"]
+        # See the long note in analyze.py: the encoder ends in a ReLU, so the
+        # activations are non-negative and uncentred however `phi` was scaled
+        # going in. Every margin fit here runs with fit_intercept=False, which
+        # forces the boundary through the origin -- unworkable on non-negative
+        # data, and the reason this diagnostic previously reported below-chance
+        # accuracy (0.2761 held out on the top 10 coordinates) on the SAE basis.
+        source = standardize(acts)
         sae_info = {"avg_active": sae["avg_active"],
                     "var_explained": sae["var_explained"],
-                    "d_hidden": sae["d_hidden"]}
+                    "d_hidden": sae["d_hidden"],
+                    "activations_standardised": True,
+                    "n_dead": int((acts > 0).sum(axis=0).__eq__(0).sum()),
+                    "n_near_constant": int((acts.std(axis=0) < 1e-12).sum())}
     else:
         source = phi
         sae_info = None
@@ -153,7 +214,8 @@ def analyse(bundle: FeatureBundle, tau: float, purity: float, quantile: float,
     d = source.shape[1]
     out: dict = {"n": int(source.shape[0]), "d": int(d),
                  "basis": "sae" if use_sae else "raw",
-                 "tau": tau, "sae": sae_info, "rules": {}}
+                 "tau": tau, "sae": sae_info, "meta": bundle.meta,
+                 "ladder": [int(m) for m in ladder], "rules": {}}
 
     idx_fit, idx_eval = _split_halves(y, g, seed)
 
@@ -254,7 +316,10 @@ def to_text(res: dict) -> str:
     if res.get("sae"):
         s = res["sae"]
         L.append(f"SAE: L0 = {s['avg_active']:.1f} of {s['d_hidden']}, "
-                 f"var explained = {s['var_explained']:.4f}\n")
+                 f"var explained = {s['var_explained']:.4f}, "
+                 f"dead = {s.get('n_dead', '?')}, "
+                 f"near-constant = {s.get('n_near_constant', '?')}, "
+                 f"standardised = {s.get('activations_standardised', False)}\n")
 
     f = res["full"]
     L.append(f"FULL Phi: separable = {f['separable_at_quantile']}, "
@@ -314,18 +379,14 @@ def main() -> None:
                     "signal, or whether no coordinate subset carries it.")
     ap.add_argument("--bundle", default="features_waterbirds_test.npz")
     ap.add_argument("--sae", action="store_true")
-    ap.add_argument("--sae-l1", type=float, default=0.03)
-    ap.add_argument("--sae-epochs", type=int, default=60)
-    ap.add_argument("--tau", type=float, default=0.15)
-    ap.add_argument("--purity", type=float, default=0.60)
-    ap.add_argument("--quantile", type=float, default=0.01)
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--ladder", type=int, nargs="+",
-                    default=[5, 10, 20, 40, 80, 160, 320, 640, 1280, 2048],
+    ap.add_argument("--sae-l1", type=float, default=DEFAULTS["sae_l1"])
+    ap.add_argument("--sae-epochs", type=int, default=DEFAULTS["sae_epochs"])
+    ap.add_argument("--tau", type=float, default=DEFAULTS["tau"])
+    ap.add_argument("--purity", type=float, default=DEFAULTS["purity"])
+    ap.add_argument("--quantile", type=float, default=DEFAULTS["quantile"])
+    ap.add_argument("--seed", type=int, default=DEFAULTS["seed"])
+    ap.add_argument("--ladder", type=int, nargs="+", default=_DEFAULT_LADDER,
                     help="subset sizes to test; rungs above d are skipped")
-    ap.add_argument("--save", default=None,
-                    help="optional path for a JSON dump; nothing is written "
-                         "unless this is given")
     args = ap.parse_args()
 
     bundle = FeatureBundle.load(args.bundle)
@@ -333,11 +394,19 @@ def main() -> None:
                   quantile=args.quantile, use_sae=args.sae,
                   sae_l1=args.sae_l1, sae_epochs=args.sae_epochs,
                   seed=args.seed, ladder=sorted(args.ladder))
-    print(to_text(res))
-    if args.save:
-        with open(args.save, "w") as fh:
-            json.dump(res, fh, indent=2, default=float)
-        print(f"\n[wrote {args.save}]")
+    res["settings"] = {k: getattr(args, k) for k in DEFAULTS}
+    res["settings"].update({"bundle": args.bundle, "sae": bool(args.sae),
+                            "ladder": sorted(args.ladder)})
+
+    text = to_text(res)
+    print(text)
+
+    prefix = _auto_prefix(args, res)
+    with open(f"{prefix}.json", "w") as fh:
+        json.dump(res, fh, indent=2, default=float)
+    with open(f"{prefix}.md", "w") as fh:
+        fh.write(text + "\n")
+    print(f"\n[wrote {prefix}.json and {prefix}.md]")
 
 
 if __name__ == "__main__":
