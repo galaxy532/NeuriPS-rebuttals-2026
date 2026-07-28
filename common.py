@@ -807,6 +807,49 @@ def compute_alpha(mf: MarginFit, iso: IsoDiagnostics) -> dict:
 # --------------------------------------------------------------------------
 
 
+#: Ridge penalties searched by `_tune_ridge_alpha`. Spans twelve orders of
+#: magnitude because the right value depends on the feature scale and on d_r/n,
+#: both of which vary by two orders across the runs this pipeline performs.
+RIDGE_GRID = np.logspace(-3, 8, 12)
+
+
+def _tune_ridge_alpha(X: np.ndarray, Y: np.ndarray, n_splits: int,
+                      seed: int) -> float:
+    """Choose the ridge penalty by cross-validation instead of hardcoding it.
+
+    WHY THIS IS NECESSARY
+    ---------------------
+    `_cv_r2` previously used a fixed `ridge_alpha = 1.0`, which is scikit-learn's
+    default and was never tuned. On these features that penalty is negligible,
+    and the consequence is measurable: across seven different (d_r, n) shapes the
+    permutation null mean matched
+
+        -p / (n - p)      p = d_r, n = training-fold size
+
+    to three significant figures -- the exact expected out-of-sample R^2 of
+    UNREGULARISED least squares on pure noise. Examples: (108, 1804) predicted
+    -0.0637, observed -0.0635; (769, 1804) predicted -0.7430, observed -0.7464;
+    (363, 1804) predicted -0.2519, observed -0.2510.
+
+    That identity means the estimator was behaving as plain OLS, so the reported
+    "coupling" was a function of d_r/n rather than of the data: the same question
+    returned 0.73 at d_r = 1063, 0.03 at d_r = 31 and -0.58 at d_r = 363 against
+    513-row folds. Those numbers are not comparable to one another and none is an
+    effect size.
+
+    The penalty is tuned ONCE per cell on the observed data and then reused for
+    the permutation null and the random-split control. Retuning inside the null
+    would compare two different estimators; holding it fixed keeps the only
+    difference between observed and null the thing being tested.
+    """
+    best_a, best_r2 = RIDGE_GRID[0], -np.inf
+    for a in RIDGE_GRID:
+        r2 = _cv_r2(X, Y, float(a), n_splits, seed)
+        if np.isfinite(r2) and r2 > best_r2:
+            best_r2, best_a = r2, float(a)
+    return float(best_a)
+
+
 def _cv_r2(X: np.ndarray, Y: np.ndarray, ridge_alpha: float, n_splits: int, seed: int) -> float:
     """Cross-validated, variance-weighted multi-output R^2 of the map X -> Y.
 
@@ -838,11 +881,12 @@ def within_cell_coupling(
     y: np.ndarray,
     g: np.ndarray,
     n_perm: int = 200,
-    ridge_alpha: float = 1.0,
+    ridge_alpha: float | None = None,
     n_splits: int = 5,
     seed: int = 0,
     min_cell: int = 200,
     reliable_cell: int = 400,
+    n_random_splits: int = 20,
 ) -> dict:
     """Test for residual Phi_r -> Phi_s coupling *within* each (y, g) cell.
 
@@ -880,6 +924,8 @@ def within_cell_coupling(
     pooled (marginal) R^2 for contrast.
     """
     rng = np.random.default_rng(seed)
+    d_r, d_s = phi_r.shape[1], phi_s.shape[1]
+    union = np.hstack([phi_r, phi_s])          # for the random-split control
     cells = []
     for yy in (-1, 1):
         for gg in (0, 1):
@@ -894,22 +940,61 @@ def within_cell_coupling(
                 })
                 continue
             X, Y = phi_r[m], phi_s[m]
-            r2 = _cv_r2(X, Y, ridge_alpha, n_splits, seed)
+
+            alpha = (_tune_ridge_alpha(X, Y, n_splits, seed)
+                     if ridge_alpha is None else float(ridge_alpha))
+            r2 = _cv_r2(X, Y, alpha, n_splits, seed)
+
+            # NULL 1 -- row permutation. Destroys the pairing between r and s
+            # while preserving each block's internal covariance. Answers: is
+            # there ANY dependence between these two blocks?
             null = np.empty(n_perm)
             for b in range(n_perm):
-                null[b] = _cv_r2(X, Y[rng.permutation(n)], ridge_alpha, n_splits, seed)
+                null[b] = _cv_r2(X, Y[rng.permutation(n)], alpha, n_splits, seed)
             null = null[np.isfinite(null)]
             p = float((1.0 + (null >= r2).sum()) / (1.0 + null.size)) if null.size else float("nan")
+
+            # NULL 2 -- random re-partition of the SAME columns into blocks of
+            # the SAME sizes. This is the control the first null cannot supply.
+            # Any two column blocks of a neural representation are correlated
+            # with each other for reasons that have nothing to do with
+            # spuriousness, so beating the permutation null only shows the
+            # representation has internal structure. The question that bears on
+            # feature-mediation is whether the IDENTIFIED assignment couples
+            # more than an arbitrary one, and that requires holding the columns
+            # and the block sizes fixed while randomising only the assignment.
+            #
+            # Note what this does and does not license. Passing it shows the
+            # split is not arbitrary; it still does not by itself establish
+            # feature-mediation, which is a claim about causal and spurious
+            # features specifically. Failing it does settle the matter in the
+            # negative.
+            rand = np.empty(n_random_splits)
+            U = union[m]
+            for b in range(n_random_splits):
+                cols = rng.permutation(U.shape[1])
+                rand[b] = _cv_r2(U[:, cols[:d_r]], U[:, cols[d_r:d_r + d_s]],
+                                 alpha, n_splits, seed)
+            rand = rand[np.isfinite(rand)]
+            p_rand = (float((1.0 + (rand >= r2).sum()) / (1.0 + rand.size))
+                      if rand.size else float("nan"))
+
             cells.append({
                 "y": yy, "g": gg, "n": n, "r2": r2,
+                "ridge_alpha": alpha,
                 "null_mean": float(null.mean()) if null.size else float("nan"),
                 "null_q95": float(np.quantile(null, 0.95)) if null.size else float("nan"),
                 "p": p,
+                "rand_split_mean": float(rand.mean()) if rand.size else float("nan"),
+                "rand_split_q95": float(np.quantile(rand, 0.95)) if rand.size else float("nan"),
+                "p_vs_random_split": p_rand,
                 "note": "" if n >= reliable_cell else
                         f"WARNING: n={n} < {reliable_cell}; estimate is unstable",
             })
 
-    pooled = _cv_r2(phi_r, phi_s, ridge_alpha, n_splits, seed)
+    alpha_pool = (_tune_ridge_alpha(phi_r, phi_s, n_splits, seed)
+                  if ridge_alpha is None else float(ridge_alpha))
+    pooled = _cv_r2(phi_r, phi_s, alpha_pool, n_splits, seed)
     finite = [c["r2"] for c in cells if np.isfinite(c["r2"])]
     sizes = [c["n"] for c in cells]
     return {
@@ -922,6 +1007,10 @@ def within_cell_coupling(
         "n_cells_unreliable": sum(1 for c in cells
                                   if np.isfinite(c["r2"]) and c["n"] < reliable_cell),
         "p_value_floor": 1.0 / (1.0 + n_perm),
+        "ridge_alpha_pooled": alpha_pool,
+        "ridge_alpha_tuned": bool(ridge_alpha is None),
+        "n_random_splits": n_random_splits,
+        "p_value_floor_random_split": 1.0 / (1.0 + n_random_splits),
     }
 
 

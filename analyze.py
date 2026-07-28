@@ -457,22 +457,46 @@ def _rule_markdown(name: str, blk: dict) -> list[str]:
              f"{c['p_value_floor']:.4f}. Cells below the minimum are refused, "
              f"not reported. Refused: {c['n_cells_refused']}; "
              f"reported but unreliable: {c['n_cells_unreliable']}.\n")
-    L.append("| y | g | n | R2_cv | null mean | null q95 | p | note |")
-    L.append("|---|---|---|---|---|---|---|---|")
+    L.append("| y | g | n | ridge alpha | R2_cv | perm null | p_perm | "
+             "RANDOM-SPLIT null | p_vs_random | note |")
+    L.append("|---|---|---|---|---|---|---|---|---|---|")
     for cell in c["cells"]:
         if not np.isfinite(cell["r2"]):
-            L.append(f"| {cell['y']:+d} | {cell['g']} | {cell['n']} | - | - | - "
-                     f"| - | {cell.get('note', '')} |")
+            L.append(f"| {cell['y']:+d} | {cell['g']} | {cell['n']} | - | - "
+                     f"| - | - | - | - | {cell.get('note', '')} |")
         else:
-            L.append(f"| {cell['y']:+d} | {cell['g']} | {cell['n']} | "
-                     f"{cell['r2']:.3f} | {cell['null_mean']:+.4f} | "
-                     f"{cell.get('null_q95', float('nan')):+.4f} | "
-                     f"{cell['p']:.4f} | {cell.get('note', '')} |")
+            L.append(f"| {cell['y']:+d} | {cell['g']} | {cell['n']} "
+                     f"| {cell.get('ridge_alpha', float('nan')):.3g} "
+                     f"| {cell['r2']:.3f} | {cell['null_mean']:+.4f} "
+                     f"| {cell['p']:.4f} "
+                     f"| {cell.get('rand_split_mean', float('nan')):+.4f} "
+                     f"| {cell.get('p_vs_random_split', float('nan')):.4f} "
+                     f"| {cell.get('note', '')} |")
     L.append(f"\n- pooled (marginal) R2 = {c['pooled_r2']:.3f}  "
              f"vs mean within-cell R2 = {c['mean_within_cell_r2']:.3f}")
     L.append("- The pooled figure is inflated by label-mediation; the "
              "within-cell figure conditions on (y, g) and is the one that "
              "speaks to feature-mediation.")
+    if c.get("ridge_alpha_tuned"):
+        L.append("- The ridge penalty is now TUNED per cell rather than fixed "
+                 "at 1.0. With the old fixed value the permutation null mean "
+                 "reproduced -p/(n-p) to three significant figures, i.e. the "
+                 "estimator was behaving as unregularised OLS and the R2 "
+                 "tracked d_r/n rather than the data.")
+    L.append(f"- **Two nulls, and they answer different questions.** `p_perm` "
+             f"(floor {c['p_value_floor']:.4f}) permutes rows: is there ANY "
+             f"dependence between the two blocks? `p_vs_random` (floor "
+             f"{c.get('p_value_floor_random_split', float('nan')):.4f}, "
+             f"{c.get('n_random_splits', 0)} draws) re-partitions the SAME "
+             "columns into blocks of the SAME sizes at random: does the "
+             "IDENTIFIED assignment couple more than an arbitrary one?")
+    L.append("- Only the second bears on feature-mediation. Any two column "
+             "blocks of a neural representation are correlated, so passing the "
+             "permutation null alone shows only that the representation has "
+             "internal structure. Passing the random-split null shows the split "
+             "is not arbitrary -- necessary, still not sufficient for a "
+             "feature-mediation claim. Failing it settles the question "
+             "negatively.")
 
     iso, m, a = blk["isotropy"], blk["margins"], blk["alpha"]
     L.append("\n**Distance from the isotropic regime**\n")
