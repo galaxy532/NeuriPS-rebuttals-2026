@@ -162,6 +162,84 @@
         "regime": "UNDEFINED -- alpha was not estimable; see failure_reason",
         "predicted_minority_exponent": NaN,
         "critical_gamma": NaN
+      },
+      "alpha_q_sweep": [
+        {
+          "q": 0.005,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.01,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.02,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.05,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.08,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.1,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.15,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        }
+      ],
+      "q_summary": {
+        "smallest_separating_q": null,
+        "smallest_estimable_q": null,
+        "alpha_range_over_estimable_q": null,
+        "alpha_crosses_one": false
       }
     },
     "sign-flip": {
@@ -298,6 +376,84 @@
         "regime": "UNDEFINED -- alpha was not estimable; see failure_reason",
         "predicted_minority_exponent": NaN,
         "critical_gamma": NaN
+      },
+      "alpha_q_sweep": [
+        {
+          "q": 0.005,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.01,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.02,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.05,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.08,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.1,
+          "separable": false,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        },
+        {
+          "q": 0.15,
+          "separable": true,
+          "gamma_tilde_maj": NaN,
+          "gamma_tilde_min": NaN,
+          "orientation": "undefined",
+          "alpha": NaN,
+          "estimable": false,
+          "regime": ""
+        }
+      ],
+      "q_summary": {
+        "smallest_separating_q": 0.15,
+        "smallest_estimable_q": null,
+        "alpha_range_over_estimable_q": null,
+        "alpha_crosses_one": false
       }
     }
   },

@@ -71,6 +71,22 @@ p-value floor with 50 permutations: 0.0196. Cells below the minimum are refused,
 - **r-block is NOT separable at the 1% quantile.** Only 84.47% of points are correctly classified by v, so gamma-tilde_g above are nan and the orientation is undefined rather than 'mirror'. The billions in `raw_min_margin` are an artefact of the 1e-9 clamp, not measurements.
 - **alpha: NOT ESTIMABLE.** dim K = 0, so no isotropic reparametrisation (A', B') exists (Section C, Eq 38): the intersection of the two kernels is trivial, there is no admissible A'v, and Theorem D.4's hypothesis is unavailable. Section C guarantees dim K > 0 only when d_s >= 2 d_r - 1, which this split does not satisfy; note that is a SUFFICIENT condition, so dim K can be positive without it when the fitted operators are rank deficient. No regime is claimed for this rule.
 
+**alpha under q-relaxed r-separability**
+
+The manuscript's gamma-tilde_g is an essential infimum, i.e. q -> 0. The separability probe puts the population error rate of the best tuned linear rule near 5-6% on this representation, so no q below that can be met and refusing alpha there says nothing about the geometry. Reading across rows shows where separability becomes attainable and how much alpha depends on that choice.
+
+| q | separable | gamma-tilde_maj | gamma-tilde_min | orientation | alpha |
+|---|---|---|---|---|---|
+| 0.005 | False | - | - | undefined | not estimable |
+| 0.01 | False | - | - | undefined | not estimable |
+| 0.02 | False | - | - | undefined | not estimable |
+| 0.05 | False | - | - | undefined | not estimable |
+| 0.08 | False | - | - | undefined | not estimable |
+| 0.1 | False | - | - | undefined | not estimable |
+| 0.15 | False | - | - | undefined | not estimable |
+
+- smallest q at which the r-block separates: None; smallest q at which alpha is estimable: None
+
 ---
 
 ## Rule: sign-flip
@@ -115,3 +131,19 @@ p-value floor with 50 permutations: 0.0196. Cells below the minimum are refused,
 - gamma-tilde_maj = nan, gamma-tilde_min = nan (orientation: undefined, ess-inf proxy: 1% quantile)
 - **r-block is NOT separable at the 1% quantile.** Only 86.54% of points are correctly classified by v, so gamma-tilde_g above are nan and the orientation is undefined rather than 'mirror'. The billions in `raw_min_margin` are an artefact of the 1e-9 clamp, not measurements.
 - **alpha: NOT ESTIMABLE.** dim K = 0, so no isotropic reparametrisation (A', B') exists (Section C, Eq 38): the intersection of the two kernels is trivial, there is no admissible A'v, and Theorem D.4's hypothesis is unavailable. Section C guarantees dim K > 0 only when d_s >= 2 d_r - 1, which this split does not satisfy; note that is a SUFFICIENT condition, so dim K can be positive without it when the fitted operators are rank deficient. No regime is claimed for this rule.
+
+**alpha under q-relaxed r-separability**
+
+The manuscript's gamma-tilde_g is an essential infimum, i.e. q -> 0. The separability probe puts the population error rate of the best tuned linear rule near 5-6% on this representation, so no q below that can be met and refusing alpha there says nothing about the geometry. Reading across rows shows where separability becomes attainable and how much alpha depends on that choice.
+
+| q | separable | gamma-tilde_maj | gamma-tilde_min | orientation | alpha |
+|---|---|---|---|---|---|
+| 0.005 | False | - | - | undefined | not estimable |
+| 0.01 | False | - | - | undefined | not estimable |
+| 0.02 | False | - | - | undefined | not estimable |
+| 0.05 | False | - | - | undefined | not estimable |
+| 0.08 | False | - | - | undefined | not estimable |
+| 0.1 | False | - | - | undefined | not estimable |
+| 0.15 | True | - | - | undefined | not estimable |
+
+- smallest q at which the r-block separates: 0.15; smallest q at which alpha is estimable: None

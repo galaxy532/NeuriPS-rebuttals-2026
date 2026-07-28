@@ -17,7 +17,12 @@ Tuned L2 logistic probe WITH intercept, C chosen by inner CV on training rows on
 
 - the last column is the estimator the rest of the pipeline uses. Where it sits far below the tuned probe, the pipeline's separability numbers reflect the solver, not the representation.
 
-**Learning curve on the full representation** (evaluation set held fixed; C retuned at each size)
+**Learning curves, per block** (evaluation set held fixed; C retuned at each size)
+
+Read the r-block curves, not the `full` one. On the SAE basis `full` is all 8192 columns, the worst-performing block, so its curve describes noise saturating rather than signal.
+
+
+_full_
 
 | train n | C | train acc | held-out acc |
 |---|---|---|---|
@@ -26,6 +31,29 @@ Tuned L2 logistic probe WITH intercept, C chosen by inner CV on training rows on
 | 1448 | 0.0001 | 0.9945 | 0.7671 |
 | 2172 | 0.0001 | 0.9894 | 0.7878 |
 | 2896 | 0.0001 | 0.9834 | 0.7995 |
+- last two gains: +0.0207, then +0.0117; final held-out 0.7995
+  -> still climbing: sample-limited, so the ceiling is not yet established and no conclusion about r-separability should be drawn from this block
 
-- accuracy gained over the last doubling of data: +0.0117
-- a curve that has flattened well below 1.0 means the ceiling is a property of the representation, so r-separability fails in the population and alpha is not estimable on this data. A curve still climbing means we are sample-limited and the question is open.
+_two-concept:r_
+
+| train n | C | train acc | held-out acc |
+|---|---|---|---|
+| 289 | 0.01 | 0.9931 | 0.8816 |
+| 724 | 0.01 | 0.9834 | 0.9075 |
+| 1448 | 0.01 | 0.9751 | 0.9268 |
+| 2172 | 0.01 | 0.9705 | 0.9303 |
+| 2896 | 0.01 | 0.9651 | 0.9344 |
+- last two gains: +0.0035, then +0.0041; final held-out 0.9344
+  -> **flattened below 1.0**: the ceiling is a property of the representation, so r-separability fails in the population for this block and alpha is not estimable at q -> 0. Use the q-sweep in analyze.py to state what IS estimable.
+
+_sign-flip:r_
+
+| train n | C | train acc | held-out acc |
+|---|---|---|---|
+| 289 | 0.1 | 0.9931 | 0.9306 |
+| 724 | 0.01 | 0.9655 | 0.9355 |
+| 1448 | 0.01 | 0.9662 | 0.9427 |
+| 2172 | 0.01 | 0.9669 | 0.9438 |
+| 2896 | 0.01 | 0.9644 | 0.9465 |
+- last two gains: +0.0010, then +0.0028; final held-out 0.9465
+  -> **flattened below 1.0**: the ceiling is a property of the representation, so r-separability fails in the population for this block and alpha is not estimable at q -> 0. Use the q-sweep in analyze.py to state what IS estimable.
