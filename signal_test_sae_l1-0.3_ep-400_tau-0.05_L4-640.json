@@ -1,0 +1,161 @@
+{
+  "n": 5794,
+  "d": 8192,
+  "basis": "sae",
+  "tau": 0.05,
+  "sae": {
+    "avg_active": 438.68206787109375,
+    "var_explained": 0.9904554799371447,
+    "d_hidden": 8192,
+    "activations_standardised": true,
+    "n_dead": 0,
+    "n_near_constant": 0
+  },
+  "meta": {
+    "source": "waterbirds",
+    "split": "test",
+    "eps": 0.5,
+    "d": 2048,
+    "epochs": 10
+  },
+  "ladder": [
+    10,
+    40,
+    160,
+    640
+  ],
+  "rules": {
+    "two-concept": {
+      "n_r": 363,
+      "n_s": 181,
+      "n_weak": 7648,
+      "blocks": {
+        "r": {
+          "n_cols": 363,
+          "mass_share": 0.388192786547194,
+          "col_share": 0.0443115234375,
+          "enrichment": 8.760538036899762,
+          "separable_at_quantile": false,
+          "frac_correct": 0.8446668967897826,
+          "holdout_acc": 0.826432022084196
+        },
+        "s": {
+          "n_cols": 181,
+          "mass_share": 0.026303733016428115,
+          "col_share": 0.0220947265625,
+          "enrichment": 1.1904982368540282,
+          "separable_at_quantile": false,
+          "frac_correct": 0.5377977217811529,
+          "holdout_acc": 0.5138026224982747
+        },
+        "weak": {
+          "n_cols": 7648,
+          "mass_share": 0.585503480436378,
+          "col_share": 0.93359375,
+          "enrichment": 0.6271501715134425,
+          "separable_at_quantile": true,
+          "frac_correct": 1.0,
+          "holdout_acc": 0.4989648033126294
+        }
+      },
+      "top_m_composition": {
+        "m": 640,
+        "n_labelled_r": 175,
+        "n_labelled_s": 26,
+        "n_weak": 439,
+        "frac_that_rule_calls_r": 0.2734375
+      }
+    },
+    "sign-flip": {
+      "n_r": 108,
+      "n_s": 47,
+      "n_weak": 8037,
+      "blocks": {
+        "r": {
+          "n_cols": 108,
+          "mass_share": 0.4043490775458316,
+          "col_share": 0.01318359375,
+          "enrichment": 30.670626326439375,
+          "separable_at_quantile": false,
+          "frac_correct": 0.8653779772178115,
+          "holdout_acc": 0.8695652173913043
+        },
+        "s": {
+          "n_cols": 47,
+          "mass_share": 0.0277542167075378,
+          "col_share": 0.0057373046875,
+          "enrichment": 4.837500920598929,
+          "separable_at_quantile": false,
+          "frac_correct": 0.5383154987918537,
+          "holdout_acc": 0.5617667356797792
+        },
+        "weak": {
+          "n_cols": 8037,
+          "mass_share": 0.567896705746631,
+          "col_share": 0.9810791015625,
+          "enrichment": 0.5788490498290906,
+          "separable_at_quantile": true,
+          "frac_correct": 1.0,
+          "holdout_acc": 0.48723257418909593
+        }
+      },
+      "top_m_composition": {
+        "m": 640,
+        "n_labelled_r": 80,
+        "n_labelled_s": 12,
+        "n_weak": 548,
+        "frac_that_rule_calls_r": 0.125
+      }
+    }
+  },
+  "full": {
+    "separable_at_quantile": true,
+    "frac_correct": 1.0,
+    "holdout_acc": 0.6142167011732229
+  },
+  "concentration": {
+    "ladder": [
+      {
+        "m": 10,
+        "separable_at_quantile": false,
+        "frac_correct": 0.8239558163617535,
+        "holdout_acc": 0.8812974465148378
+      },
+      {
+        "m": 40,
+        "separable_at_quantile": false,
+        "frac_correct": 0.8030721435968243,
+        "holdout_acc": 0.8812974465148378
+      },
+      {
+        "m": 160,
+        "separable_at_quantile": false,
+        "frac_correct": 0.8746979634104246,
+        "holdout_acc": 0.8433402346445825
+      },
+      {
+        "m": 640,
+        "separable_at_quantile": false,
+        "frac_correct": 0.9892992751121851,
+        "holdout_acc": 0.8761214630779848
+      }
+    ],
+    "smallest_separating_m": null
+  },
+  "settings": {
+    "tau": 0.05,
+    "purity": 0.6,
+    "quantile": 0.01,
+    "seed": 0,
+    "sae_l1": 0.3,
+    "sae_epochs": 400,
+    "bundle": "features_waterbirds_test.npz",
+    "sae": true,
+    "ladder": [
+      10,
+      40,
+      160,
+      640
+    ]
+  }
+}

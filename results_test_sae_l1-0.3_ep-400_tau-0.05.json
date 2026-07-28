@@ -40,9 +40,9 @@
             "y": -1,
             "g": 0,
             "n": 2255,
-            "r2": -0.004365197289726952,
-            "null_mean": -0.2509973950711741,
-            "null_q95": -0.24196329137019573,
+            "r2": -0.18623872269616903,
+            "null_mean": -0.27715682841363987,
+            "null_q95": -0.2726564805581694,
             "p": 0.0196078431372549,
             "note": ""
           },
@@ -50,9 +50,9 @@
             "y": -1,
             "g": 1,
             "n": 2255,
-            "r2": -0.018254024693532545,
-            "null_mean": -0.2479973406145583,
-            "null_q95": -0.24068870174497242,
+            "r2": -0.1952843039371639,
+            "null_mean": -0.27699774705589236,
+            "null_q95": -0.27308693243302684,
             "p": 0.0196078431372549,
             "note": ""
           },
@@ -60,9 +60,9 @@
             "y": 1,
             "g": 0,
             "n": 642,
-            "r2": -0.5764504884246469,
-            "null_mean": -1.2748733755690642,
-            "null_q95": -1.2080339666524071,
+            "r2": -2.242562250522219,
+            "null_mean": -2.894645390796726,
+            "null_q95": -2.80094644990733,
             "p": 0.0196078431372549,
             "note": ""
           },
@@ -70,15 +70,15 @@
             "y": 1,
             "g": 1,
             "n": 642,
-            "r2": -0.5947914500439104,
-            "null_mean": -1.3022394753982434,
-            "null_q95": -1.2443228829873216,
+            "r2": -2.271870099962034,
+            "null_mean": -2.947317897605938,
+            "null_q95": -2.8258637503369295,
             "p": 0.0196078431372549,
             "note": ""
           }
         ],
-        "pooled_r2": 0.08715326750860397,
-        "mean_within_cell_r2": -0.2984652901129542,
+        "pooled_r2": -0.03217040905241708,
+        "mean_within_cell_r2": -1.2239888442793965,
         "n_perm": 50,
         "min_cell_size": 642,
         "n_cells_refused": 0,
@@ -90,29 +90,37 @@
         "gamma_tilde_min": NaN,
         "orientation": "undefined",
         "separable_at_quantile": false,
-        "frac_correct": 0.9363134276838109,
-        "separable_fraction": 0.9363134276838109,
+        "frac_correct": 0.8446668967897826,
+        "separable_fraction": 0.8446668967897826,
         "quantile_used": 0.01,
         "raw_min_margin": {
-          "0": -2623637326.009984,
-          "1": -3012092662.0649242
+          "0": -3087319299.5417485,
+          "1": -4078735308.91178
         }
       },
       "isotropy": {
-        "mu_A": 7.681827640598846,
-        "mu_B": 17.848233489330948,
-        "mu": -1.5990632837101388,
+        "mu_A": 0.14465068033683307,
+        "mu_B": 0.17936451678012102,
+        "mu": -0.012721370522793407,
+        "mu_A_prime": 0.0,
+        "mu_B_prime": 0.0,
+        "mu_prime": 0.0,
+        "u_A_norm": 0.3803296995198154,
+        "u_B_norm": 0.42351448237353234,
+        "reparam_exists": false,
+        "attractive_satisfiable": false,
+        "attractive_prime": false,
         "defects": {
-          "A^T A": 0.9507139570381259,
-          "A^T B": 0.9992184164499672,
-          "B^T B": 0.9050878924931065,
-          "B^T A": 0.9969216477083636
+          "A^T A": 0.913427558516822,
+          "A^T B": 0.9989014559910134,
+          "B^T B": 0.8317207765436943,
+          "B^T A": 0.9992133776916192
         },
         "defects_scaled": {
-          "A^T A": 0.1273968043075503,
-          "A^T B": 0.2273647645468343,
-          "B^T B": 0.2016557521869624,
-          "B^T A": 0.11436731174755145
+          "A^T A": 0.1692407170421016,
+          "A^T B": 0.1765153980452939,
+          "B^T B": 0.13964552366908237,
+          "B^T A": 0.20864592557162684
         },
         "degenerate": {
           "A^T A": false,
@@ -120,19 +128,19 @@
           "B^T B": false,
           "B^T A": false
         },
-        "max_defect": 0.9992184164499672,
-        "d_star": 416.6809079525172,
-        "d_star_relative": 0.9999524456613479,
+        "max_defect": 0.9992133776916192,
+        "d_star": 59.25661695202107,
+        "d_star_relative": 1.0,
         "d_star_sensitivity": {
           "1e-06": 1.0,
           "0.0001": 1.0,
           "0.001": 1.0,
-          "0.01": 0.9999524456613479,
-          "0.1": 0.9909499258496648
+          "0.01": 1.0,
+          "0.1": 1.0
         },
-        "d_star_informative": true,
-        "dim_K": 4,
-        "attractive_condition_holds": false,
+        "d_star_informative": false,
+        "dim_K": 0,
+        "attractive_condition_holds": true,
         "d_s_ge_2d_r": false,
         "d_r": 363,
         "d_s": 181
@@ -140,12 +148,17 @@
       "alpha": {
         "alpha": NaN,
         "estimable": false,
-        "failure_reason": "the r-block is not separable at the 1% quantile -- only 93.63% of points are correctly classified by v, so the group r-margins gamma-tilde_g have no positive common scale and the WLOG min_g gamma-tilde_g = 1 cannot be imposed. alpha is a statement about a separable r-block and there is nothing here for it to describe",
+        "failure_reason": "dim K = 0, so no isotropic reparametrisation (A', B') exists (Section C, Eq 38): the intersection of the two kernels is trivial, there is no admissible A'v, and Theorem D.4's hypothesis is unavailable. Section C guarantees dim K > 0 only when d_s >= 2 d_r - 1, which this split does not satisfy; note that is a SUFFICIENT condition, so dim K can be positive without it when the fitted operators are rank deficient",
         "orientation": "undefined",
         "advantaged_group": "undefined",
         "gamma_tilde_advantaged": NaN,
         "mu_diagonal_used": NaN,
-        "mu": -1.5990632837101388,
+        "mu_prime": 0.0,
+        "reparam_exists": false,
+        "attractive_satisfiable": false,
+        "mu_diagonal_raw": NaN,
+        "mu": -0.012721370522793407,
+        "alpha_raw_operators": NaN,
         "regime": "UNDEFINED -- alpha was not estimable; see failure_reason",
         "predicted_minority_exponent": NaN,
         "critical_gamma": NaN
@@ -163,9 +176,9 @@
             "y": -1,
             "g": 0,
             "n": 2255,
-            "r2": 0.1047684043088104,
-            "null_mean": -0.06346908765997665,
-            "null_q95": -0.05752644716215971,
+            "r2": 0.01616330236425001,
+            "null_mean": -0.06607898324143466,
+            "null_q95": -0.06263539000676824,
             "p": 0.0196078431372549,
             "note": ""
           },
@@ -173,9 +186,9 @@
             "y": -1,
             "g": 1,
             "n": 2255,
-            "r2": 0.12707154895340744,
-            "null_mean": -0.06370876518229095,
-            "null_q95": -0.05916899717203277,
+            "r2": 0.025671657105480472,
+            "null_mean": -0.0661394261263437,
+            "null_q95": -0.06254044306170425,
             "p": 0.0196078431372549,
             "note": ""
           },
@@ -183,9 +196,9 @@
             "y": 1,
             "g": 0,
             "n": 642,
-            "r2": 0.0194910104808097,
-            "null_mean": -0.2679953997288536,
-            "null_q95": -0.24944787469112084,
+            "r2": -0.08685759842887175,
+            "null_mean": -0.2952449777559746,
+            "null_q95": -0.274141048270589,
             "p": 0.0196078431372549,
             "note": ""
           },
@@ -193,15 +206,15 @@
             "y": 1,
             "g": 1,
             "n": 642,
-            "r2": 0.011050803821648136,
-            "null_mean": -0.2656158311393673,
-            "null_q95": -0.24346643334801468,
+            "r2": -0.12805945164177057,
+            "null_mean": -0.30342907898652827,
+            "null_q95": -0.2789570069414269,
             "p": 0.0196078431372549,
             "note": ""
           }
         ],
-        "pooled_r2": 0.17405355455464266,
-        "mean_within_cell_r2": 0.06559544189116892,
+        "pooled_r2": 0.06120241720779962,
+        "mean_within_cell_r2": -0.04327052265022796,
         "n_perm": 50,
         "min_cell_size": 642,
         "n_cells_refused": 0,
@@ -213,29 +226,37 @@
         "gamma_tilde_min": NaN,
         "orientation": "undefined",
         "separable_at_quantile": false,
-        "frac_correct": 0.9387297204004142,
-        "separable_fraction": 0.9387297204004142,
+        "frac_correct": 0.8653779772178115,
+        "separable_fraction": 0.8653779772178115,
         "quantile_used": 0.01,
         "raw_min_margin": {
-          "0": -3723503926.2293024,
-          "1": -3648866055.0793705
+          "0": -4060093894.687378,
+          "1": -6790376115.63759
         }
       },
       "isotropy": {
-        "mu_A": 2.8658434656192733,
-        "mu_B": 5.959797071486727,
-        "mu": 0.4392128183443554,
+        "mu_A": 0.17131683155303168,
+        "mu_B": 0.14033466269652708,
+        "mu": 0.09813810686560781,
+        "mu_A_prime": 0.0,
+        "mu_B_prime": 0.0,
+        "mu_prime": 0.0,
+        "u_A_norm": 0.41390437488993964,
+        "u_B_norm": 0.3746126835766871,
+        "reparam_exists": false,
+        "attractive_satisfiable": false,
+        "attractive_prime": false,
         "defects": {
-          "A^T A": 0.7570081475880072,
-          "A^T B": 0.9978827052083945,
-          "B^T B": 0.7559611789994389,
-          "B^T A": 0.9925268832485517
+          "A^T A": 0.8693245145555057,
+          "A^T B": 0.8996948923829942,
+          "B^T B": 0.8719471879802987,
+          "B^T A": 0.9330183146887682
         },
         "defects_scaled": {
-          "A^T A": 0.10402838755889615,
-          "A^T B": 0.2815084512665783,
-          "B^T B": 0.19905250564524818,
-          "B^T A": 0.14923713409463532
+          "A^T A": 0.230359227953394,
+          "A^T B": 0.13843414304740087,
+          "B^T B": 0.11969615827526174,
+          "B^T A": 0.17415885565323366
         },
         "degenerate": {
           "A^T A": false,
@@ -243,15 +264,15 @@
           "B^T B": false,
           "B^T A": false
         },
-        "max_defect": 0.9978827052083945,
-        "d_star": 236.05718593807023,
+        "max_defect": 0.9330183146887682,
+        "d_star": 31.685004661285927,
         "d_star_relative": 1.0,
         "d_star_sensitivity": {
           "1e-06": 1.0,
           "0.0001": 1.0,
           "0.001": 1.0,
           "0.01": 1.0,
-          "0.1": 0.9850546920648071
+          "0.1": 1.0
         },
         "d_star_informative": false,
         "dim_K": 0,
@@ -263,12 +284,17 @@
       "alpha": {
         "alpha": NaN,
         "estimable": false,
-        "failure_reason": "the r-block is not separable at the 1% quantile -- only 93.87% of points are correctly classified by v, so the group r-margins gamma-tilde_g have no positive common scale and the WLOG min_g gamma-tilde_g = 1 cannot be imposed. alpha is a statement about a separable r-block and there is nothing here for it to describe",
+        "failure_reason": "dim K = 0, so no isotropic reparametrisation (A', B') exists (Section C, Eq 38): the intersection of the two kernels is trivial, there is no admissible A'v, and Theorem D.4's hypothesis is unavailable. Section C guarantees dim K > 0 only when d_s >= 2 d_r - 1, which this split does not satisfy; note that is a SUFFICIENT condition, so dim K can be positive without it when the fitted operators are rank deficient",
         "orientation": "undefined",
         "advantaged_group": "undefined",
         "gamma_tilde_advantaged": NaN,
         "mu_diagonal_used": NaN,
-        "mu": 0.4392128183443554,
+        "mu_prime": 0.0,
+        "reparam_exists": false,
+        "attractive_satisfiable": false,
+        "mu_diagonal_raw": NaN,
+        "mu": 0.09813810686560781,
+        "alpha_raw_operators": NaN,
         "regime": "UNDEFINED -- alpha was not estimable; see failure_reason",
         "predicted_minority_exponent": NaN,
         "critical_gamma": NaN
@@ -281,7 +307,10 @@
     "d_hidden": 8192,
     "l1": 0.3,
     "epochs": 400,
-    "avg_active_at_init": 4096.0
+    "avg_active_at_init": 4096.0,
+    "activations_standardised": true,
+    "n_dead": 0,
+    "n_near_constant": 0
   },
   "rule_agreement": {
     "jaccard_r": 0.29041095890410956,
